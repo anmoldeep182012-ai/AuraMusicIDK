@@ -117,12 +117,7 @@ def get_stream_info(query, is_video=False):
         'source_address': '0.0.0.0',
         'noplaylist': True,
         'default_search': 'auto',
-        'cookiefile': cookie_file,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web_embedded']
-            }
-        }
+        'cookiefile': cookie_file
     }
     
     def extract_with_opts(opts, q):
@@ -280,12 +275,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
             ydl_opts = {
                 'extract_flat': True,
                 'quiet': True,
-                'cookiefile': "COOKIE/Youtube_Netscape.txt" if "spotify" not in query else "COOKIE/Spotify_Netscape.txt",
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'web_embedded']
-                    }
-                }
+                'cookiefile': "COOKIE/Youtube_Netscape.txt" if "spotify" not in query else "COOKIE/Spotify_Netscape.txt"
             }
             with YoutubeDL(ydl_opts) as ydl:
                 # Offload blocking extraction to executor
@@ -642,11 +632,6 @@ async def song_download(client: Client, message: Message):
             "outtmpl": "downloads/%(title)s.%(ext)s",
             "quiet": True,
             "cookiefile": "COOKIE/Youtube_Netscape.txt",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "web_embedded"]
-                }
-            },
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
