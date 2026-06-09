@@ -9,6 +9,7 @@ import asyncio
 import random
 import urllib.request
 import re
+import json
 from concurrent.futures import ThreadPoolExecutor
 from helpers.styling import small_caps, fraktur, spaced_text
 from config import Config
@@ -85,6 +86,147 @@ async def ensure_admin_sync(client: Client, chat_id: int):
     except Exception as e:
         print(f"Admin Sync Error: {e}")
 
+def get_video_id(url):
+    if not url:
+        return None
+    reg = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})'
+    match = re.search(reg, url)
+    if match:
+        return match.group(1)
+    if len(url) == 11 and all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for c in url):
+        return url
+    return None
+
+def get_dynamic_piped_instances():
+    try:
+        url = "https://raw.githubusercontent.com/TeamPiped/documentation/main/content/docs/public-instances/index.md"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            content = response.read().decode('utf-8')
+            apis = re.findall(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[a-zA-Z0-9.-]+)*', content)
+            seen = set()
+            cleaned = []
+            for x in apis:
+                if any(bad in x for bad in ["/registered", "/badge", "github.com", "piped.video"]):
+                    continue
+                if ("pipedapi" in x or "piped-api" in x or "api.piped" in x) and x not in seen:
+                    seen.add(x)
+                    cleaned.append(x)
+            return cleaned
+    except Exception as e:
+        print(f"Failed to fetch Piped instances: {e}")
+    return []
+
+def get_dynamic_invidious_instances():
+    try:
+        url = "https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            content = response.read().decode('utf-8')
+            domains = re.findall(r'\*\s*\[([^\]]+)\]\(https?://[^)]+\)', content)
+            cleaned = []
+            for d in domains:
+                d = d.strip()
+                if d and not d.endswith(".onion") and not d.endswith(".i2p") and not d.endswith(".ygg"):
+                    cleaned.append(f"https://{d}")
+            return cleaned
+    except Exception as e:
+        print(f"Failed to fetch Invidious instances: {e}")
+    return []
+
+def extract_from_piped(video_id, is_video=False):
+    piped_instances = get_dynamic_piped_instances()
+    if not piped_instances:
+        piped_instances = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.leptons.xyz",
+            "https://pipedapi.nosebs.ru",
+            "https://piped-api.privacy.com.de",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.yt",
+        ]
+    for base in piped_instances[:6]:
+        try:
+            url = f"{base}/streams/{video_id}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if is_video:
+                    video_streams = [s for s in data.get("videoStreams", []) if not s.get("videoOnly", False)]
+                    if video_streams:
+                        selected = video_streams[0]
+                        for s in video_streams:
+                            quality = s.get("quality", "")
+                            if "720p" in quality or "480p" in quality or "360p" in quality:
+                                selected = s
+                                break
+                        return {
+                            "url": selected["url"],
+                            "title": data.get("title", "Unknown"),
+                            "duration_sec": data.get("duration", 0),
+                            "thumbnail": data.get("thumbnailUrl")
+                        }
+                else:
+                    audio_streams = data.get("audioStreams", [])
+                    if audio_streams:
+                        selected = audio_streams[-1]
+                        return {
+                            "url": selected["url"],
+                            "title": data.get("title", "Unknown"),
+                            "duration_sec": data.get("duration", 0),
+                            "thumbnail": data.get("thumbnailUrl")
+                        }
+        except Exception as e:
+            print(f"Piped Extraction Error on {base}: {e}")
+    return None
+
+def extract_from_invidious(video_id, is_video=False):
+    invidious_instances = get_dynamic_invidious_instances()
+    if not invidious_instances:
+        invidious_instances = [
+            "https://inv.nadeko.net",
+            "https://invidious.nerdvpn.de",
+            "https://inv.thepixora.com",
+            "https://yt.chocolatemoo53.com",
+            "https://invidious.tiekoetter.com",
+            "https://invidious.f5.si",
+        ]
+    for base in invidious_instances[:6]:
+        try:
+            url = f"{base}/api/v1/videos/{video_id}?local=true"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                title = data.get("title", "Unknown")
+                duration_sec = data.get("lengthSeconds", 0)
+                thumbnails = data.get("videoThumbnails", [])
+                thumbnail = thumbnails[0].get("url") if thumbnails else None
+                
+                if is_video:
+                    format_streams = data.get("formatStreams", [])
+                    if format_streams:
+                        selected = format_streams[-1]
+                        return {
+                            "url": selected["url"],
+                            "title": title,
+                            "duration_sec": duration_sec,
+                            "thumbnail": thumbnail
+                        }
+                else:
+                    adaptive = data.get("adaptiveFormats", [])
+                    audio_streams = [a for a in adaptive if "audio" in a.get("type", "").lower() or "audio" in a.get("mimeType", "").lower()]
+                    if audio_streams:
+                        selected = audio_streams[0]
+                        return {
+                            "url": selected["url"],
+                            "title": title,
+                            "duration_sec": duration_sec,
+                            "thumbnail": thumbnail
+                        }
+        except Exception as e:
+            print(f"Invidious Extraction Error on {base}: {e}")
+    return None
+
 def get_stream_info(query, is_video=False):
     # Determine which cookie file to use
     cookie_file = "COOKIE/Youtube_Netscape.txt"
@@ -152,6 +294,36 @@ def get_stream_info(query, is_video=False):
                 ydl_opts['format'] = "b" if is_video else "ba/b"
                 info = extract_with_opts(ydl_opts, query)
             except Exception:
+                # Alternate API Fallbacks (Piped / Invidious)
+                video_id = get_video_id(query)
+                if video_id:
+                    piped_res = extract_from_piped(video_id, is_video)
+                    if piped_res:
+                        duration_sec = piped_res["duration_sec"]
+                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                        return {
+                            "url": piped_res["url"],
+                            "audio_url": None,
+                            "title": piped_res["title"],
+                            "duration": duration_min,
+                            "duration_sec": duration_sec,
+                            "thumbnail": piped_res["thumbnail"],
+                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                        }
+                    
+                    invidious_res = extract_from_invidious(video_id, is_video)
+                    if invidious_res:
+                        duration_sec = invidious_res["duration_sec"]
+                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                        return {
+                            "url": invidious_res["url"],
+                            "audio_url": None,
+                            "title": invidious_res["title"],
+                            "duration": duration_min,
+                            "duration_sec": duration_sec,
+                            "thumbnail": invidious_res["thumbnail"],
+                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                        }
                 raise first_error
 
     if 'entries' in info:
@@ -665,10 +837,34 @@ async def song_download(client: Client, message: Message):
         # Ensure downloads dir exists
         if not os.path.exists("downloads"): os.makedirs("downloads")
         
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(link, download=True)
-            raw_path = ydl.prepare_filename(info)
-            file_path = os.path.splitext(raw_path)[0] + ".mp3"
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(link, download=True)
+                raw_path = ydl.prepare_filename(info)
+                file_path = os.path.splitext(raw_path)[0] + ".mp3"
+        except Exception as first_dl_error:
+            video_id = get_video_id(link)
+            fallback_success = False
+            if video_id:
+                piped_res = extract_from_piped(video_id, is_video=False)
+                if piped_res and piped_res.get("url"):
+                    try:
+                        file_path = f"downloads/{video_id}.mp3"
+                        urllib.request.urlretrieve(piped_res["url"], file_path)
+                        fallback_success = True
+                    except:
+                        pass
+                if not fallback_success:
+                    invidious_res = extract_from_invidious(video_id, is_video=False)
+                    if invidious_res and invidious_res.get("url"):
+                        try:
+                            file_path = f"downloads/{video_id}.mp3"
+                            urllib.request.urlretrieve(invidious_res["url"], file_path)
+                            fallback_success = True
+                        except:
+                            pass
+            if not fallback_success:
+                raise first_dl_error
             
         await m.edit(small_caps("ᴜᴘʟᴏᴀᴅɪɴɢ..."))
         await message.reply_audio(file_path, caption=f"<blockquote>{fraktur(title)} ❞</blockquote>")
