@@ -1,264 +1,370 @@
 import aiosqlite
 import json
+import os
 from config import Config
+
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None
 
 class Database:
     def __init__(self):
-        self.db_path = Config.DB_PATH
+        # Cloud platforms set DATABASE_URL, fallback to DB_PATH
+        self.db_path = os.getenv("DATABASE_URL") or Config.DB_PATH
+        self.is_postgres = self.db_path.startswith(("postgres://", "postgresql://"))
+        self.pool = None
+        self._served_chats = set()
+        self._served_users = set()
+        self._sudoers = set()
+        self._settings = {}
 
     async def init(self):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS sudoers (user_id INTEGER PRIMARY KEY)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS warns (user_id INTEGER, chat_id INTEGER, count INTEGER, PRIMARY KEY (user_id, chat_id))"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS global_bans (user_id INTEGER PRIMARY KEY, reason TEXT)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS served_chats (chat_id INTEGER PRIMARY KEY)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS served_users (user_id INTEGER PRIMARY KEY)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS user_playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS playlist_tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id INTEGER, title TEXT, url TEXT)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS users_economy (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, kills INTEGER DEFAULT 0)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS daily_claims (user_id INTEGER PRIMARY KEY, last_claim INTEGER)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS auth_users (user_id INTEGER, chat_id INTEGER, PRIMARY KEY (user_id, chat_id))"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS blacklisted_chats (chat_id INTEGER PRIMARY KEY)"
-            )
-            await db.execute(
-                "CREATE TABLE IF NOT EXISTS blacklisted_users (user_id INTEGER PRIMARY KEY)"
-            )
-            await db.commit()
+        if self.is_postgres:
+            if not asyncpg:
+                raise ImportError("PostgreSQL database URL detected but 'asyncpg' is not installed.")
+            db_url = self.db_path
+            if db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql://", 1)
+            # Create connection pool
+            self.pool = await asyncpg.create_pool(db_url)
+            async with self.pool.acquire() as conn:
+                await conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS sudoers (user_id BIGINT PRIMARY KEY)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS warns (user_id BIGINT, chat_id BIGINT, count INTEGER, PRIMARY KEY (user_id, chat_id))")
+                await conn.execute("CREATE TABLE IF NOT EXISTS global_bans (user_id BIGINT PRIMARY KEY, reason TEXT)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS served_chats (chat_id BIGINT PRIMARY KEY)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS served_users (user_id BIGINT PRIMARY KEY)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS user_playlists (id SERIAL PRIMARY KEY, user_id BIGINT, name TEXT)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS playlist_tracks (id SERIAL PRIMARY KEY, playlist_id INTEGER, title TEXT, url TEXT)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS users_economy (user_id BIGINT PRIMARY KEY, balance BIGINT DEFAULT 0, kills INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, protection_until BIGINT DEFAULT 0)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS daily_claims (user_id BIGINT PRIMARY KEY, last_claim BIGINT)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS auth_users (user_id BIGINT, chat_id BIGINT, PRIMARY KEY (user_id, chat_id))")
+                await conn.execute("CREATE TABLE IF NOT EXISTS blacklisted_chats (chat_id BIGINT PRIMARY KEY)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS blacklisted_users (user_id BIGINT PRIMARY KEY)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS coupons (code TEXT PRIMARY KEY, coins BIGINT, creator_id BIGINT, claimed_by BIGINT DEFAULT NULL, claimed_at BIGINT DEFAULT NULL, created_at BIGINT DEFAULT 0)")
+                await conn.execute("CREATE TABLE IF NOT EXISTS group_claims (chat_id BIGINT PRIMARY KEY, inviter_id BIGINT, claimed INTEGER DEFAULT 0)")
+        else:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+                await db.execute("CREATE TABLE IF NOT EXISTS sudoers (user_id INTEGER PRIMARY KEY)")
+                await db.execute("CREATE TABLE IF NOT EXISTS warns (user_id INTEGER, chat_id INTEGER, count INTEGER, PRIMARY KEY (user_id, chat_id))")
+                await db.execute("CREATE TABLE IF NOT EXISTS global_bans (user_id INTEGER PRIMARY KEY, reason TEXT)")
+                await db.execute("CREATE TABLE IF NOT EXISTS served_chats (chat_id INTEGER PRIMARY KEY)")
+                await db.execute("CREATE TABLE IF NOT EXISTS served_users (user_id INTEGER PRIMARY KEY)")
+                await db.execute("CREATE TABLE IF NOT EXISTS user_playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT)")
+                await db.execute("CREATE TABLE IF NOT EXISTS playlist_tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id INTEGER, title TEXT, url TEXT)")
+                await db.execute("CREATE TABLE IF NOT EXISTS users_economy (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, kills INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, protection_until INTEGER DEFAULT 0)")
+                await db.execute("CREATE TABLE IF NOT EXISTS daily_claims (user_id INTEGER PRIMARY KEY, last_claim INTEGER)")
+                await db.execute("CREATE TABLE IF NOT EXISTS auth_users (user_id INTEGER, chat_id INTEGER, PRIMARY KEY (user_id, chat_id))")
+                await db.execute("CREATE TABLE IF NOT EXISTS blacklisted_chats (chat_id INTEGER PRIMARY KEY)")
+                await db.execute("CREATE TABLE IF NOT EXISTS blacklisted_users (user_id INTEGER PRIMARY KEY)")
+                await db.execute("CREATE TABLE IF NOT EXISTS coupons (code TEXT PRIMARY KEY, coins INTEGER, creator_id INTEGER, claimed_by INTEGER DEFAULT NULL, claimed_at INTEGER DEFAULT NULL, created_at INTEGER DEFAULT 0)")
+                await db.execute("CREATE TABLE IF NOT EXISTS group_claims (chat_id INTEGER PRIMARY KEY, inviter_id INTEGER, claimed INTEGER DEFAULT 0)")
+                await db.commit()
+
+        # Load caches
+        chats = await self._fetch("SELECT chat_id FROM served_chats")
+        self._served_chats = set(row[0] for row in chats)
+        
+        users = await self._fetch("SELECT user_id FROM served_users")
+        self._served_users = set(row[0] for row in users)
+        
+        sudos = await self._fetch("SELECT user_id FROM sudoers")
+        self._sudoers = set(row[0] for row in sudos)
+        
+        settings = await self._fetch("SELECT key, value FROM settings")
+        self._settings = {row[0]: row[1] for row in settings}
+
+        # Migration to add created_at if not present
+        try:
+            if self.is_postgres:
+                async with self.pool.acquire() as conn:
+                    await conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS created_at BIGINT DEFAULT 0")
+            else:
+                async with aiosqlite.connect(self.db_path) as db_conn:
+                    await db_conn.execute("ALTER TABLE coupons ADD COLUMN created_at INTEGER DEFAULT 0")
+                    await db_conn.commit()
+        except Exception:
+            pass
+
+    def _translate_sql(self, sql: str) -> str:
+        if not self.is_postgres:
+            return sql
+        
+        # Convert placeholders ? to $1, $2, ...
+        placeholder_count = 0
+        while "?" in sql:
+            placeholder_count += 1
+            sql = sql.replace("?", f"${placeholder_count}", 1)
+            
+        # Replace INSERT OR IGNORE
+        if "INSERT OR IGNORE INTO" in sql:
+            sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO") + " ON CONFLICT DO NOTHING"
+            
+        # Replace INSERT OR REPLACE
+        if "INSERT OR REPLACE INTO" in sql:
+            if "global_bans" in sql:
+                sql = sql.replace("INSERT OR REPLACE INTO global_bans", "INSERT INTO global_bans") + " ON CONFLICT (user_id) DO UPDATE SET reason = EXCLUDED.reason"
+            elif "daily_claims" in sql:
+                sql = sql.replace("INSERT OR REPLACE INTO daily_claims", "INSERT INTO daily_claims") + " ON CONFLICT (user_id) DO UPDATE SET last_claim = EXCLUDED.last_claim"
+            elif "settings" in sql:
+                sql = sql.replace("INSERT OR REPLACE INTO settings", "INSERT INTO settings") + " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+            elif "warns" in sql:
+                sql = sql.replace("INSERT OR REPLACE INTO warns", "INSERT INTO warns") + " ON CONFLICT (user_id, chat_id) DO UPDATE SET count = EXCLUDED.count"
+                
+        return sql
+
+    async def _execute(self, sql: str, *args):
+        sql = self._translate_sql(sql)
+        if self.is_postgres:
+            async with self.pool.acquire() as conn:
+                await conn.execute(sql, *args)
+        else:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(sql, args)
+                await db.commit()
+
+    async def _fetch(self, sql: str, *args) -> list:
+        sql = self._translate_sql(sql)
+        if self.is_postgres:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(sql, *args)
+                return [list(r.values()) for r in rows]
+        else:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(sql, args) as cursor:
+                    return await cursor.fetchall()
+
+    async def _fetchrow(self, sql: str, *args):
+        sql = self._translate_sql(sql)
+        if self.is_postgres:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(sql, *args)
+                return list(row.values()) if row else None
+        else:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(sql, args) as cursor:
+                    return await cursor.fetchone()
 
     # Auth Management
     async def add_auth_user(self, user_id: int, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO auth_users (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
-            await db.commit()
+        await self._execute("INSERT OR IGNORE INTO auth_users (user_id, chat_id) VALUES (?, ?)", user_id, chat_id)
 
     async def remove_auth_user(self, user_id: int, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM auth_users WHERE user_id = ? AND chat_id = ?", (user_id, chat_id))
-            await db.commit()
+        await self._execute("DELETE FROM auth_users WHERE user_id = ? AND chat_id = ?", user_id, chat_id)
 
     async def get_auth_users(self, chat_id: int) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id FROM auth_users WHERE chat_id = ?", (chat_id,)) as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        rows = await self._fetch("SELECT user_id FROM auth_users WHERE chat_id = ?", chat_id)
+        return [row[0] for row in rows]
 
     # Blacklist Management
     async def blacklist_chat(self, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO blacklisted_chats (chat_id) VALUES (?)", (chat_id,))
-            await db.commit()
+        await self._execute("INSERT OR IGNORE INTO blacklisted_chats (chat_id) VALUES (?)", chat_id)
 
     async def whitelist_chat(self, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM blacklisted_chats WHERE chat_id = ?", (chat_id,))
-            await db.commit()
+        await self._execute("DELETE FROM blacklisted_chats WHERE chat_id = ?", chat_id)
 
     async def get_blacklisted_chats(self) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT chat_id FROM blacklisted_chats") as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        rows = await self._fetch("SELECT chat_id FROM blacklisted_chats")
+        return [row[0] for row in rows]
 
     async def blacklist_user(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO blacklisted_users (user_id) VALUES (?)", (user_id,))
-            await db.commit()
+        await self._execute("INSERT OR IGNORE INTO blacklisted_users (user_id) VALUES (?)", user_id)
 
     async def whitelist_user(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM blacklisted_users WHERE user_id = ?", (user_id,))
-            await db.commit()
+        await self._execute("DELETE FROM blacklisted_users WHERE user_id = ?", user_id)
 
     async def get_blacklisted_users(self) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id FROM blacklisted_users") as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        rows = await self._fetch("SELECT user_id FROM blacklisted_users")
+        return [row[0] for row in rows]
 
     # Global Ban Management
     async def gban_user(self, user_id: int, reason: str = "No reason"):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR REPLACE INTO global_bans (user_id, reason) VALUES (?, ?)", (user_id, reason))
-            await db.commit()
+        await self._execute("INSERT OR REPLACE INTO global_bans (user_id, reason) VALUES (?, ?)", user_id, reason)
 
     async def ungban_user(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM global_bans WHERE user_id = ?", (user_id,))
-            await db.commit()
+        await self._execute("DELETE FROM global_bans WHERE user_id = ?", user_id)
 
     async def get_gbanned_users(self) -> list[dict]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id, reason FROM global_bans") as cursor:
-                rows = await cursor.fetchall()
-                return [{"user_id": row[0], "reason": row[1]} for row in rows]
+        rows = await self._fetch("SELECT user_id, reason FROM global_bans")
+        return [{"user_id": row[0], "reason": row[1]} for row in rows]
 
     # Economy Management
     async def get_balance(self, user_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT balance FROM users_economy WHERE user_id = ?", (user_id,)) as cursor:
-                row = await cursor.fetchone()
-                if row: return row[0]
-                await db.execute("INSERT OR IGNORE INTO users_economy (user_id, balance) VALUES (?, ?)", (user_id, 0))
-                await db.commit()
-                return 0
+        row = await self._fetchrow("SELECT balance FROM users_economy WHERE user_id = ?", user_id)
+        if row: return row[0]
+        await self._execute("INSERT OR IGNORE INTO users_economy (user_id, balance) VALUES (?, 0)", user_id)
+        return 0
 
     async def update_balance(self, user_id: int, amount: int):
-        current = await self.get_balance(user_id)
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR REPLACE INTO users_economy (user_id, balance, kills) VALUES (?, ?, (SELECT kills FROM users_economy WHERE user_id = ?))", (user_id, current + amount, user_id))
-            await db.commit()
+        await self.get_balance(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET balance = COALESCE(balance, 0) + ? WHERE user_id = ?", amount, user_id)
 
     async def get_daily_claim(self, user_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT last_claim FROM daily_claims WHERE user_id = ?", (user_id,)) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else 0
+        row = await self._fetchrow("SELECT last_claim FROM daily_claims WHERE user_id = ?", user_id)
+        return row[0] if row else 0
 
     async def set_daily_claim(self, user_id: int, timestamp: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR REPLACE INTO daily_claims (user_id, last_claim) VALUES (?, ?)", (user_id, timestamp))
-            await db.commit()
+        await self._execute("INSERT OR REPLACE INTO daily_claims (user_id, last_claim) VALUES (?, ?)", user_id, timestamp)
 
     async def get_top_rich(self, limit: int = 10) -> list[tuple[int, int]]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id, balance FROM users_economy ORDER BY balance DESC LIMIT ?", (limit,)) as cursor:
-                return await cursor.fetchall()
+        rows = await self._fetch("SELECT user_id, balance FROM users_economy ORDER BY balance DESC LIMIT ?", limit)
+        return [tuple(row) for row in rows]
 
     async def get_top_kills(self, limit: int = 10) -> list[tuple[int, int]]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id, kills FROM users_economy ORDER BY kills DESC LIMIT ?", (limit,)) as cursor:
-                return await cursor.fetchall()
+        rows = await self._fetch("SELECT user_id, kills FROM users_economy ORDER BY kills DESC LIMIT ?", limit)
+        return [tuple(row) for row in rows]
 
     async def add_kill(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("UPDATE users_economy SET kills = kills + 1 WHERE user_id = ?", (user_id,))
-            await db.commit()
+        await self.get_balance(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET kills = COALESCE(kills, 0) + 1 WHERE user_id = ?", user_id)
 
     # Chat Tracking
     async def add_served_chat(self, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO served_chats (chat_id) VALUES (?)", (chat_id,))
-            await db.commit()
+        if chat_id in self._served_chats:
+            return
+        self._served_chats.add(chat_id)
+        await self._execute("INSERT OR IGNORE INTO served_chats (chat_id) VALUES (?)", chat_id)
 
     async def get_served_chats(self) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT chat_id FROM served_chats") as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        return list(self._served_chats)
 
     async def add_served_user(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO served_users (user_id) VALUES (?)", (user_id,))
-            await db.commit()
+        if user_id in self._served_users:
+            return
+        self._served_users.add(user_id)
+        await self._execute("INSERT OR IGNORE INTO served_users (user_id) VALUES (?)", user_id)
 
     async def get_served_users(self) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id FROM served_users") as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        return list(self._served_users)
 
     async def set_setting(self, key: str, value: str):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-                (key, value)
-            )
-            await db.commit()
+        self._settings[key] = value
+        await self._execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
 
     async def get_setting(self, key: str, default: str = None):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else default
+        return self._settings.get(key, default)
 
     # Sudo Management
     async def add_sudo(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR IGNORE INTO sudoers (user_id) VALUES (?)", (user_id,))
-            await db.commit()
+        self._sudoers.add(user_id)
+        await self._execute("INSERT OR IGNORE INTO sudoers (user_id) VALUES (?)", user_id)
 
     async def remove_sudo(self, user_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM sudoers WHERE user_id = ?", (user_id,))
-            await db.commit()
+        if user_id in self._sudoers:
+            self._sudoers.remove(user_id)
+        await self._execute("DELETE FROM sudoers WHERE user_id = ?", user_id)
 
     async def get_sudoers(self) -> list[int]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT user_id FROM sudoers") as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        return list(self._sudoers)
 
     # Warning Management
     async def get_warns(self, user_id: int, chat_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT count FROM warns WHERE user_id = ? AND chat_id = ?", (user_id, chat_id)) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else 0
+        row = await self._fetchrow("SELECT count FROM warns WHERE user_id = ? AND chat_id = ?", user_id, chat_id)
+        return row[0] if row else 0
 
     async def add_warn(self, user_id: int, chat_id: int):
         count = await self.get_warns(user_id, chat_id) + 1
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT OR REPLACE INTO warns (user_id, chat_id, count) VALUES (?, ?, ?)", (user_id, chat_id, count))
-            await db.commit()
+        await self._execute("INSERT OR REPLACE INTO warns (user_id, chat_id, count) VALUES (?, ?, ?)", user_id, chat_id, count)
         return count
 
     async def reset_warns(self, user_id: int, chat_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("DELETE FROM warns WHERE user_id = ? AND chat_id = ?", (user_id, chat_id))
-            await db.commit()
+        await self._execute("DELETE FROM warns WHERE user_id = ? AND chat_id = ?", user_id, chat_id)
 
     # Playlist Management
     async def create_playlist(self, user_id: int, name: str):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("INSERT INTO user_playlists (user_id, name) VALUES (?, ?)", (user_id, name))
-            await db.commit()
+        await self._execute("INSERT INTO user_playlists (user_id, name) VALUES (?, ?)", user_id, name)
 
     async def get_playlists(self, user_id: int) -> list[str]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT name FROM user_playlists WHERE user_id = ?", (user_id,)) as cursor:
-                rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+        rows = await self._fetch("SELECT name FROM user_playlists WHERE user_id = ?", user_id)
+        return [row[0] for row in rows]
 
     async def add_to_playlist(self, user_id: int, name: str, title: str, url: str):
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT id FROM user_playlists WHERE user_id = ? AND name = ?", (user_id, name)) as cursor:
-                row = await cursor.fetchone()
-                if row:
-                    playlist_id = row[0]
-                    await db.execute("INSERT INTO playlist_tracks (playlist_id, title, url) VALUES (?, ?, ?)", (playlist_id, title, url))
-                    await db.commit()
+        row = await self._fetchrow("SELECT id FROM user_playlists WHERE user_id = ? AND name = ?", user_id, name)
+        if row:
+            playlist_id = row[0]
+            await self._execute("INSERT INTO playlist_tracks (playlist_id, title, url) VALUES (?, ?, ?)", playlist_id, title, url)
 
     async def get_playlist_tracks(self, user_id: int, name: str) -> list[dict]:
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT t.title, t.url FROM playlist_tracks t JOIN user_playlists p ON t.playlist_id = p.id WHERE p.user_id = ? AND p.name = ?", 
-                (user_id, name)
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [{"title": row[0], "url": row[1]} for row in rows]
+        rows = await self._fetch(
+            "SELECT t.title, t.url FROM playlist_tracks t JOIN user_playlists p ON t.playlist_id = p.id WHERE p.user_id = ? AND p.name = ?", 
+            user_id, name
+        )
+        return [{"title": row[0], "url": row[1]} for row in rows]
+
+    async def get_xp(self, user_id: int) -> int:
+        row = await self._fetchrow("SELECT xp FROM users_economy WHERE user_id = ?", user_id)
+        if row: return row[0] if row[0] is not None else 0
+        await self._execute("INSERT OR IGNORE INTO users_economy (user_id, balance, xp) VALUES (?, 0, 0)", user_id)
+        return 0
+
+    async def update_xp(self, user_id: int, amount: int):
+        await self.get_xp(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET xp = COALESCE(xp, 0) + ? WHERE user_id = ?", amount, user_id)
+
+    async def get_protection(self, user_id: int) -> int:
+        row = await self._fetchrow("SELECT protection_until FROM users_economy WHERE user_id = ?", user_id)
+        if row: return row[0] if row[0] is not None else 0
+        await self._execute("INSERT OR IGNORE INTO users_economy (user_id, balance, protection_until) VALUES (?, 0, 0)", user_id)
+        return 0
+
+    async def set_protection(self, user_id: int, protection_until: int):
+        await self.get_protection(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET protection_until = ? WHERE user_id = ?", protection_until, user_id)
+
+    async def is_premium(self, user_id: int) -> bool:
+        if user_id == Config.OWNER_ID or user_id in self._sudoers:
+            return True
+        val = await self.get_setting(f"premium_{user_id}")
+        return val == "true"
+
+    async def set_premium(self, user_id: int, is_premium: bool = True):
+        val = "true" if is_premium else "false"
+        await self.set_setting(f"premium_{user_id}", val)
+
+    async def set_balance(self, user_id: int, amount: int):
+        await self.get_balance(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET balance = ? WHERE user_id = ?", amount, user_id)
+
+    async def set_xp(self, user_id: int, amount: int):
+        await self.get_xp(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET xp = ? WHERE user_id = ?", amount, user_id)
+
+    async def set_kills(self, user_id: int, amount: int):
+        await self.get_balance(user_id) # ensure row exists
+        await self._execute("UPDATE users_economy SET kills = ? WHERE user_id = ?", amount, user_id)
+
+    async def create_coupon(self, code: str, coins: int, creator_id: int, timestamp: int):
+        await self._execute("INSERT INTO coupons (code, coins, creator_id, created_at) VALUES (?, ?, ?, ?)", code, coins, creator_id, timestamp)
+
+    async def get_coupon(self, code: str) -> dict:
+        row = await self._fetchrow("SELECT code, coins, creator_id, claimed_by, created_at FROM coupons WHERE code = ?", code)
+        if row:
+            return {"code": row[0], "coins": row[1], "creator_id": row[2], "claimed_by": row[3], "created_at": row[4]}
+        return None
+
+    async def claim_coupon(self, code: str, user_id: int, timestamp: int):
+        await self._execute("UPDATE coupons SET claimed_by = ?, claimed_at = ? WHERE code = ?", user_id, timestamp, code)
+
+    async def save_group_inviter(self, chat_id: int, inviter_id: int):
+        if self.is_postgres:
+            # PostgreSQL: use INSERT INTO ... ON CONFLICT DO NOTHING
+            await self._execute("INSERT INTO group_claims (chat_id, inviter_id, claimed) VALUES (?, ?, 0) ON CONFLICT (chat_id) DO NOTHING", chat_id, inviter_id)
+        else:
+            # SQLite: use INSERT OR IGNORE
+            await self._execute("INSERT OR IGNORE INTO group_claims (chat_id, inviter_id, claimed) VALUES (?, ?, 0)", chat_id, inviter_id)
+
+    async def get_group_claim(self, chat_id: int) -> dict:
+        row = await self._fetchrow("SELECT inviter_id, claimed FROM group_claims WHERE chat_id = ?", chat_id)
+        if row:
+            return {"inviter_id": row[0], "claimed": row[1]}
+        return None
+
+    async def mark_group_claimed(self, chat_id: int):
+        await self._execute("UPDATE group_claims SET claimed = 1 WHERE chat_id = ?", chat_id)
 
 db = Database()
+
+
+

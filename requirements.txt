@@ -3,7 +3,7 @@ tgcrypto
 python-dotenv
 aiohttp
 aiofiles
-pytgcalls==2.1.0
-tgcalls==2.0.0
+py-tgcalls
 yt-dlp
 youtube-search-python
+asyncpg

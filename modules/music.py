@@ -20,6 +20,7 @@ from helpers.utils import animator
 pytgcalls: PyTgCalls = None
 userbot: Client = None
 executor = ThreadPoolExecutor(max_workers=5)
+sys_random = random.SystemRandom()
 
 # Queue and Auto-Leave Management
 queues = {} 
@@ -159,7 +160,7 @@ def get_stream_info(query, is_video=False):
     duration_sec = data.get('duration', 0)
     duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
     thumbnail = data.get('thumbnail')
-    
+    yt_url = data.get('webpage_url') or f"https://www.youtube.com/watch?v={data.get('id')}"
     return {
         "url": url,
         "audio_url": audio_url,
@@ -167,8 +168,20 @@ def get_stream_info(query, is_video=False):
         "duration": duration_min,
         "duration_sec": duration_sec,
         "thumbnail": thumbnail,
-        "is_video": is_video
+        "is_video": is_video,
+        "yt_url": yt_url
     }
+
+def create_media_stream(track: dict) -> MediaStream:
+    kwargs = {}
+    if track.get("is_video"):
+        kwargs["video_parameters"] = VideoQuality.HD_720p
+    return MediaStream(
+        track["url"],
+        audio_path=track.get("audio_url"),
+        audio_parameters=AudioQuality.HIGH,
+        **kwargs
+    )
 
 async def leave_timer(chat_id, group_name):
     await asyncio.sleep(30)
@@ -239,7 +252,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
     loading_text = "ᴘʀᴇᴘᴀʀɪɴɢ ʏᴏᴜʀ ᴘʟᴀʏʟɪꜱᴛ..." if is_pl else "ᴘʀᴇᴘᴀʀɪɴɢ ʏᴏᴜʀ ꜱᴛʀᴇᴀᴍ..."
     m = await client.send_message(chat_id, f"<blockquote>{small_caps(loading_text)}</blockquote>", parse_mode=enums.ParseMode.HTML)
     
-    video_folder = "THUMBNAIL VID"
+    video_folder = "assets/THUMBNAIL VID"
     local_videos = []
     if os.path.exists(video_folder):
         local_videos = [os.path.join(video_folder, f) for f in os.listdir(video_folder) if f.endswith(".mp4")]
@@ -268,7 +281,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
                     for entry in entries:
                         url = entry.get('url') or entry.get('webpage_url')
                         if url:
-                            queues[chat_id].append({"url": url, "audio_url": None, "title": entry.get('title', 'Unknown'), "duration": "PL", "user": message.from_user.mention(style=enums.ParseMode.HTML), "is_video": is_video, "thumbnail": None})
+                            queues[chat_id].append({"url": url, "audio_url": None, "title": entry.get('title', 'Unknown'), "duration": "PL", "user": message.from_user.mention(style=enums.ParseMode.HTML), "is_video": is_video, "thumbnail": None, "yt_url": url})
                     header = fraktur("Playlist Queued")
                     body = f"ᴀᴅᴅᴇᴅ {len(entries)} ᴛʀᴀᴄᴋꜱ ᴛᴏ ᴛʜᴇ Qᴜᴇᴜᴇ.\n\nᴛʏᴘᴇ /Qᴜᴇᴜᴇ ᴛᴏ ᴠɪᴇᴡ."
                     await animator.safe_edit(client, chat_id, m.id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
@@ -281,11 +294,11 @@ async def play_logic(client: Client, message: Message, is_video=True):
             if is_playing:
                 pos = len(queues[chat_id]) - 1
                 header = small_caps('ᴀᴅᴅᴇᴅ ᴛᴏ Qᴜᴇᴜᴇ ᴀᴛ')
-                queue_text = f"<blockquote>{header} #{pos} ❞</blockquote>\n" \
-                             f"<blockquote>{small_caps('ᴛɪᴛʟᴇ')}: {info['title'][:30]} ❞\n" \
+                queue_text = f"<blockquote>\n{header} #{pos} ❞\n</blockquote>\n" \
+                             f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {info['title'][:30]} ❞\n" \
                              f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {info['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
-                             f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {info['user']}</blockquote>\n" \
-                             f"<blockquote>{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞</blockquote>"
+                             f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {info['user']}\n</blockquote>\n" \
+                             f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
                 buttons = InlineKeyboardMarkup([
                     [
                         InlineKeyboardButton(small_caps("ʟɪɴᴋ"), url="https://t.me/Sexuatic", style=enums.ButtonStyle.PRIMARY),
@@ -296,7 +309,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 ])
                 await m.delete()
                 if local_videos:
-                    await client.send_video(chat_id=chat_id, video=random.choice(local_videos), caption=queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                    await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
                 else: await client.send_message(chat_id, queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
                 return
 
@@ -308,27 +321,36 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 queues[chat_id][0] = first
 
             # Optimization: Force separate streams for high-quality AV sync
-            stream = MediaStream(
-                first['url'],
-                audio_path=first.get('audio_url'),
-                audio_parameters=AudioQuality.HIGH,
-                video_parameters=VideoQuality.HD_720p if is_video else None
-            )
+            stream = create_media_stream(first)
             await pytgcalls.play(chat_id, stream)
             
-            buttons = InlineKeyboardMarkup([[InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {first['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)], [InlineKeyboardButton(small_caps("ᴘʀᴇᴠ"), callback_data="music_prev", style=enums.ButtonStyle.PRIMARY), InlineKeyboardButton(small_caps("ᴘᴀᴜꜱᴇ"), callback_data="music_pause", style=enums.ButtonStyle.PRIMARY), InlineKeyboardButton(small_caps("ꜱᴋɪᴘ"), callback_data="music_skip", style=enums.ButtonStyle.SUCCESS)], [InlineKeyboardButton(small_caps("ᴛᴜɴᴇꜱ"), url="https://t.me/AuralyxTunes", style=enums.ButtonStyle.PRIMARY), InlineKeyboardButton(small_caps("ʜᴏᴍᴇ"), url="https://t.me/AuralyxHome", style=enums.ButtonStyle.PRIMARY)], [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]])
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {first['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)],
+                [
+                    InlineKeyboardButton(small_caps("ᴘʀᴇᴠ"), callback_data="music_prev", style=enums.ButtonStyle.DEFAULT),
+                    InlineKeyboardButton(small_caps("ᴘᴀᴜꜱᴇ"), callback_data="music_pause", style=enums.ButtonStyle.PRIMARY),
+                    InlineKeyboardButton(small_caps("ꜱᴋɪᴘ"), callback_data="music_skip", style=enums.ButtonStyle.DEFAULT)
+                ],
+                [
+                    InlineKeyboardButton(small_caps("ᴛᴜɴᴇꜱ"), url="https://t.me/AuralyxTunes", style=enums.ButtonStyle.PRIMARY),
+                    InlineKeyboardButton(small_caps("ʜᴏᴍᴇ"), url="https://t.me/AuralyxHome", style=enums.ButtonStyle.PRIMARY)
+                ],
+                [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
+            ])
             header = fraktur("Now Playing")
-            panel_text = f"<blockquote>{header} ❞</blockquote>\n" \
-                         f"<blockquote>{small_caps('ᴛɪᴛʟᴇ')}: {first['title'][:30]} ❞\n" \
-                         f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {first['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
-                         f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {first['user']}</blockquote>\n" \
-                         f"<blockquote>{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞</blockquote>"
+            
+            panel_text = f"<blockquote>\n{header} ❞\n</blockquote>\n" \
+                          f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {first['title'][:30]} ❞\n" \
+                          f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {first['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
+                          f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {first['user']}\n</blockquote>\n" \
+                          f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
             await m.delete()
             if local_videos:
-                await client.send_video(chat_id=chat_id, video=random.choice(local_videos), caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
             elif first.get('thumbnail'):
                 await client.send_photo(chat_id=chat_id, photo=first['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
-            else: await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+            else:
+                await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
 
     except Exception as e:
         error_msg = await handle_error(chat_id, e)
@@ -366,7 +388,7 @@ async def playlist_command(client: Client, message: Message):
             if not tracks: return await message.reply_text(small_caps("ᴘʟᴀʏʟɪꜱᴛ ɪꜱ ᴇᴍᴘᴛʏ."))
             chat_id = message.chat.id
             if chat_id not in queues: queues[chat_id] = []
-            for t in tracks: queues[chat_id].append({"url": t['url'], "audio_url": None, "title": t['title'], "duration": "PL", "user": message.from_user.mention, "is_video": True, "thumbnail": None})
+            for t in tracks: queues[chat_id].append({"url": t['url'], "audio_url": None, "title": t['title'], "duration": "PL", "user": message.from_user.mention, "is_video": True, "thumbnail": None, "yt_url": t['url']})
             await message.reply_text(f"<blockquote>{fraktur('Queued')} ❞\n\n{small_caps('ᴘʟᴀʏʟɪꜱᴛ ᴀᴅᴅᴇᴅ')}</blockquote>")
             if len(queues[chat_id]) == len(tracks): await play_logic(client, message, is_video=True)
     except Exception as e: await message.reply_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
@@ -404,12 +426,12 @@ async def player_panel(client: Client, message: Message):
         [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
     ])
     header = fraktur("Player Panel")
-    panel_text = f"<blockquote>{header} ❞</blockquote>\n" \
-                 f"<blockquote>{small_caps('ᴛɪᴛʟᴇ')}: {first['title'][:30]} ❞\n" \
+    panel_text = f"<blockquote>\n{header} ❞\n</blockquote>\n" \
+                 f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {first['title'][:30]} ❞\n" \
                  f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {first['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
-                 f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {first['user']}</blockquote>\n" \
-                 f"<blockquote>{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞</blockquote>"
-    await message.reply_text(panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                 f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {first['user']}\n</blockquote>\n" \
+                 f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
+    await message.reply_text(panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
 
 @Client.on_message(filters.command(["playforce", "pf"]) & admin)
 async def play_force(client: Client, message: Message):
@@ -511,7 +533,7 @@ async def queue_command(client: Client, message: Message):
         if i == 0:
             body += f"» {fraktur('Now Playing')}:\n{small_caps(track['title'][:30])}\n\n"
         else:
-            body += f"{i}. {small_caps(track['title'][:30])} (ʀᴇQ: {track['user']})\n"
+            body += f"{i}. {small_caps(track['title'][:30])} (<b>ʀᴇQ</b>: {track['user']})\n"
     
     header = fraktur("Music Queue")
     await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
@@ -571,7 +593,7 @@ async def seek_back_command(client: Client, message: Message):
     try:
         seconds = int(message.command[1])
         await pytgcalls.seek_in_call(message.chat.id, -seconds)
-        await message.reply_text(f"<blockquote>{fraktur('Seeked Back')} ❞\n\n{small_caps('ʙʏ')} {seconds} {small_caps('ꜱᴇᴄᴏɴᴅꜱ')}</blockquote>")
+        await message.reply_text(f"<blockquote>{fraktur('Seeked Back')} ❞\n\n{small_caps('ʙʏ')} {seconds} {small_caps('ꜱᴇᴄᴏɴᴅ')}</blockquote>")
     except Exception as e: await message.reply_text(str(e))
 
 @Client.on_message(filters.command(["speed", "cspeed"]) & admin)
@@ -604,7 +626,13 @@ async def song_download(client: Client, message: Message):
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": "downloads/%(title)s.%(ext)s",
-            "quiet": True
+            "quiet": True,
+            "cookiefile": "COOKIE/Youtube_Netscape.txt",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192"
+            }]
         }
         
         # Ensure downloads dir exists
@@ -612,7 +640,8 @@ async def song_download(client: Client, message: Message):
         
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(link, download=True)
-            file_path = ydl.prepare_filename(info)
+            raw_path = ydl.prepare_filename(info)
+            file_path = os.path.splitext(raw_path)[0] + ".mp3"
             
         await m.edit(small_caps("ᴜᴘʟᴏᴀᴅɪɴɢ..."))
         await message.reply_audio(file_path, caption=f"<blockquote>{fraktur(title)} ❞</blockquote>")
@@ -623,12 +652,12 @@ async def song_download(client: Client, message: Message):
 
 @Client.on_message(filters.command(["pause", "p"]) & admin)
 async def pause_command(client: Client, message: Message):
-    try: await pytgcalls.mute(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Paused')} ❞</blockquote>")
+    try: await pytgcalls.pause(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Paused')} ❞</blockquote>")
     except Exception as e: await client.send_message(message.chat.id, await handle_error(message.chat.id, e))
 
 @Client.on_message(filters.command(["resume", "r"]) & admin)
 async def resume_command(client: Client, message: Message):
-    try: await pytgcalls.unmute(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Resumed')} ❞</blockquote>")
+    try: await pytgcalls.resume(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Resumed')} ❞</blockquote>")
     except Exception as e: await client.send_message(message.chat.id, await handle_error(message.chat.id, e))
 
 @Client.on_callback_query(filters.regex("^music_"))
@@ -646,13 +675,13 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
             queues[chat_id].pop(0)
             if queues[chat_id]:
                 next_track = queues[chat_id][0]
-                await pytgcalls.play(chat_id, MediaStream(next_track['url'], audio_path=next_track.get('audio_url'), audio_parameters=AudioQuality.HIGH, video_parameters=VideoQuality.HD_720p if next_track.get('is_video') else None))
+                await pytgcalls.play(chat_id, create_media_stream(next_track))
                 await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
             else: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ɴᴏ ᴍᴏʀᴇ ᴛʀᴀᴄᴋꜱ')}</blockquote>")
         except Exception as e: await client.send_message(chat_id, f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
     elif data == "pause":
-        try: await pytgcalls.mute(chat_id); await callback_query.answer(small_caps("ᴘᴀᴜꜱᴇᴅ"))
-        except: await pytgcalls.unmute(chat_id); await callback_query.answer(small_caps("ʀᴇꜱᴜᴍᴇᴅ"))
+        try: await pytgcalls.pause(chat_id); await callback_query.answer(small_caps("ᴘᴀᴜꜱᴇᴅ"))
+        except: await pytgcalls.resume(chat_id); await callback_query.answer(small_caps("ʀᴇꜱᴜᴍᴇᴅ"))
     elif data == "stop":
         if chat_id in queues: queues[chat_id] = []
         try: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
@@ -667,7 +696,7 @@ async def skip_music(client: Client, message: Message):
         queues[chat_id].pop(0)
         if queues[chat_id]: 
             next_t = queues[chat_id][0]
-            await pytgcalls.play(chat_id, MediaStream(next_t['url'], audio_path=next_t.get('audio_url'), audio_parameters=AudioQuality.HIGH, video_parameters=VideoQuality.HD_720p if next_t.get('is_video') else None))
+            await pytgcalls.play(chat_id, create_media_stream(next_t))
             await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
         else: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ʟᴇᴀᴠɪɴɢ')}</blockquote>")
     except Exception as e: await client.send_message(chat_id, await handle_error(chat_id, e))
@@ -692,11 +721,11 @@ def init_handlers(pytg: PyTgCalls):
                     # If loop is enabled, don't pop, just play the same track again
                     if queues[chat_id]:
                         next_t = queues[chat_id][0]
-                        await client.play(chat_id, MediaStream(next_t['url'], audio_path=next_t.get('audio_url'), audio_parameters=AudioQuality.HIGH, video_parameters=VideoQuality.HD_720p if next_t.get('is_video') else None))
+                        await client.play(chat_id, create_media_stream(next_t))
                         return
 
                 if queues[chat_id]: queues[chat_id].pop(0)
                 if queues[chat_id]: 
                     next_t = queues[chat_id][0]
-                    await client.play(chat_id, MediaStream(next_t['url'], audio_path=next_t.get('audio_url'), audio_parameters=AudioQuality.HIGH, video_parameters=VideoQuality.HD_720p if next_t.get('is_video') else None))
+                    await client.play(chat_id, create_media_stream(next_t))
                 else: auto_leave_tasks[chat_id] = asyncio.create_task(leave_timer(chat_id, "this group"))

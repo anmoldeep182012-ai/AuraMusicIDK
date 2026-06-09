@@ -18,8 +18,8 @@ DEFAULT_START_TEXT = """
 <blockquote>ᴀ ᴜ ʀ ᴀ ʟ ʏ x  ❞</blockquote>
 
 <blockquote>ᴜᴘᴛɪᴍᴇ: {uptime}  ❞
-ꜱᴇʀᴠᴇʀ ꜱᴛᴏʀᴀɢᴇ: {storage}%
-ᴄᴘᴜ ʟᴏᴀᴅ: {cpu}%</blockquote>
+**ꜱᴇʀᴠᴇʀ ꜱᴛᴏʀᴀɢᴇ**: {storage}%
+**ᴄᴘᴜ ʟᴏᴀᴅ**: {cpu}%</blockquote>
 
 <blockquote>ᴇɴᴊᴏʏ ᴘʀᴇᴍɪᴜᴍ ʟɪꜱᴛᴇɴɪɴɢ ᴇxᴘᴇʀɪᴇɴᴄᴇ  ❞</blockquote>
 
@@ -271,7 +271,7 @@ async def help_callbacks(client: Client, callback_query: CallbackQuery):
             except: pass
             
     elif action == "ping":
-        content = """• <code>/ping</code> » ꜱʜᴏᴡꜱ ᴛʜᴇ ᴘɪɴɢ ᴀɴᴅ ꜱʏꜱᴛᴇᴍ ꜱᴛᴀᴛꜱ.\n• <code>/stats</code> » ꜱʜᴏᴡꜱ ᴛʜᴇ ᴏᴠᴇʀᴀʟʟ ꜱᴛᴀᴛꜱ."""
+        content = """• <code>/ping</code> » ꜱʜᴏᴡ<u>s</u> ᴛʜᴇ ᴘɪɴɢ ᴀɴᴅ ꜱʏꜱᴛᴇᴍ ꜱᴛᴀᴛꜱ.\n• <code>/stats</code> » ꜱʜᴏᴡꜱ ᴛʜᴇ ᴏᴠᴇʀᴀʟʟ ꜱᴛᴀᴛꜱ."""
         markup = get_back_button(origin)
         if callback_query.message.photo or callback_query.message.video or callback_query.message.document:
             try: await callback_query.edit_message_caption(caption=get_help_msg("ᴘ ɪ ɴ ɢ   &   ꜱ ᴛ ᴀ ᴛ ꜱ", content), reply_markup=markup, parse_mode=enums.ParseMode.HTML)
@@ -364,10 +364,10 @@ async def help_callbacks(client: Client, callback_query: CallbackQuery):
         content = """• <code>/vplay</code> » ꜱᴛʀᴇᴀᴍ ᴠɪᴅᴇᴏ ᴏɴ ᴠɪᴅᴇᴏᴄʜᴀᴛ.\n• <code>/vplayforce</code> » ꜰᴏʀᴄᴇ ꜱᴛʀᴇᴀᴍ ᴠɪᴅᴇᴏ ᴏɴ ᴠᴄ."""
         markup = get_back_button(origin)
         if callback_query.message.photo or callback_query.message.video or callback_query.message.document:
-            try: await callback_query.edit_message_caption(caption=get_help_msg("ᴘ ʟ ᴀ ʏ   ᴄ ᴏ ᴍ ᴍ ᴀ ɴ ᴅ ꜱ", content), reply_markup=markup, parse_mode=enums.ParseMode.HTML)
+            try: await callback_query.edit_message_caption(caption=get_help_msg("ᴘ ʟ ᴀ ʏ   <b>ᴄᴏᴍᴍᴀɴᴅꜱ</b>", content), reply_markup=markup, parse_mode=enums.ParseMode.HTML)
             except: pass
         else:
-            try: await callback_query.edit_message_text(get_help_msg("ᴘ ʟ ᴀ ʏ   ᴄ ᴏ ᴍ ᴍ ᴀ ɴ ᴅ ꜱ", content), reply_markup=markup, parse_mode=enums.ParseMode.HTML)
+            try: await callback_query.edit_message_text(get_help_msg("ᴘ ʟ ᴀ ʏ   <b>ᴄᴏᴍᴍᴀɴᴅꜱ</b>", content), reply_markup=markup, parse_mode=enums.ParseMode.HTML)
             except: pass
 
     elif action == "shuffle":

@@ -1,5 +1,5 @@
 from pyrogram import Client, filters, enums
-from pyrogram.types import Message
+from pyrogram.types import Message, ChatPrivileges
 from helpers.filters import admin
 from helpers.styling import small_caps, fraktur
 from database.db import db
@@ -18,7 +18,7 @@ async def handle_admin_error(e):
     error_str = str(e)
     header = fraktur("Action Failed")
     if "USER_ADMIN_INVALID" in error_str or "ChatAdminRequired" in error_str:
-        body = "ɪ ʟᴀᴄᴋ ᴛʜᴇ ɴᴇᴄᴇꜱꜱᴀʀʏ ᴀᴅᴍɪɴ ʀɪɢʜᴛꜱ. ᴇɴꜱᴜʀᴇ ɪ ᴀᴍ ᴘʀᴏᴍᴏᴛᴇᴅ ᴡɪᴛʜ ᴛʜᴇ ᴀᴘᴘʀᴏᴘʀɪᴀᴛᴇ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ."
+        body = "ɪ ʟᴀᴄᴋ ᴛʜᴇ ɴᴇᴄᴇꜱꜱᴀʀʏ ᴀᴍɪɴ ʀɪɢʜᴛꜱ. ᴇɴꜱᴜʀᴇ ɪ ᴀᴍ ᴘʀᴏᴍᴏᴛᴇᴅ ᴡɪᴛʜ ᴛʜᴇ ᴀᴘᴘʀᴏᴘʀɪᴀᴛᴇ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ."
     else:
         body = f"ᴀɴ ᴜɴᴇxᴘᴇᴄᴛᴇᴅ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ: {error_str[:100]}"
     return f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>"
@@ -262,7 +262,7 @@ async def promote_user(client: Client, message: Message):
         
         await message.chat.promote_member(
             user.id,
-            privileges=enums.ChatPrivileges(
+            privileges=ChatPrivileges(
                 can_manage_chat=True,
                 can_delete_messages=True,
                 can_manage_video_chats=True,
@@ -295,7 +295,7 @@ async def demote_user(client: Client, message: Message):
         
         await message.chat.promote_member(
             user.id,
-            privileges=enums.ChatPrivileges(
+            privileges=ChatPrivileges(
                 can_manage_chat=False,
                 can_delete_messages=False,
                 can_manage_video_chats=False,

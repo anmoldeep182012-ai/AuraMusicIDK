@@ -1,1 +1,1 @@
-# helpers package
+# Helpers package initializer

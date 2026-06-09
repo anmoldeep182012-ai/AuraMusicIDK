@@ -46,6 +46,11 @@ def convert_json_to_netscape(json_file: str, output_file: str):
         with open(json_file, 'r', encoding='utf-8') as f:
             cookies = json.load(f)
         
+        # Ensure parent dir exists
+        out_dir = os.path.dirname(output_file)
+        if out_dir and not os.path.exists(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+            
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write("# Netscape HTTP Cookie File\n")
             f.write("# http://curl.haxx.se/rfc/cookie_spec.html\n")

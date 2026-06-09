@@ -2,6 +2,34 @@ import asyncio
 import logging
 import os
 import sys
+import httpx
+
+# Monkeypatch httpx to support proxies argument in top-level functions (needed for youtubesearchpython compatibility with new httpx)
+def patch_httpx():
+    orig_post = httpx.post
+    orig_get = httpx.get
+
+    def patched_post(*args, **kwargs):
+        if 'proxies' in kwargs:
+            proxies = kwargs.pop('proxies')
+            if proxies:
+                with httpx.Client(proxies=proxies) as client:
+                    return client.post(*args, **kwargs)
+        return orig_post(*args, **kwargs)
+
+    def patched_get(*args, **kwargs):
+        if 'proxies' in kwargs:
+            proxies = kwargs.pop('proxies')
+            if proxies:
+                with httpx.Client(proxies=proxies) as client:
+                    return client.get(*args, **kwargs)
+        return orig_get(*args, **kwargs)
+
+    httpx.post = patched_post
+    httpx.get = patched_get
+
+patch_httpx()
+
 from pyrogram import Client, idle, StopPropagation
 from pytgcalls import PyTgCalls
 from config import Config
@@ -9,6 +37,7 @@ from database.db import db
 from helpers.utils import convert_json_to_netscape
 from helpers.styling import small_caps
 import modules.music as music
+from helpers.void_state import VoidState, trigger_void_event
 
 # Configure logging
 logging.basicConfig(
@@ -61,7 +90,7 @@ async def generate_session():
             if not found:
                 f.write(f"SESSION_STRING={session_string}\n")
         
-        print("\n✅ Session string generated and saved to .env!")
+        print("\nSession string generated and saved to .env!")
         print("Bot will now restart...")
         
         # Restart the script
@@ -73,11 +102,11 @@ async def generate_session():
         sys.exit(1)
 
 async def init():
-    # Add FFMPEG to PATH
+    # Add FFMPEG to PATH (Prepend to bypass any slow/broken system FFMPEG binaries)
     ffmpeg_path = os.path.abspath("FFMPEG")
     if os.path.exists(ffmpeg_path):
-        os.environ["PATH"] += os.pathsep + ffmpeg_path
-        logger.info(f"Added FFMPEG to PATH: {ffmpeg_path}")
+        os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ["PATH"]
+        logger.info(f"Prepended FFMPEG to PATH: {ffmpeg_path}")
     else:
         logger.warning("FFMPEG directory not found!")
 
@@ -125,6 +154,44 @@ async def init():
     async def global_middleware(client, message):
         if not message: return
         
+        # 0. Void Event Intercepts & Tracking
+        user_id = message.from_user.id if message.from_user else None
+        
+        # Ghost Watch Mirroring
+        if message.chat:
+            for owner_id, watched_chat_id in list(VoidState.ghost_watches.items()):
+                if message.chat.id == watched_chat_id:
+                    try:
+                        sender_name = message.from_user.first_name if message.from_user else "System"
+                        chat_name = message.chat.title or "Group"
+                        text_content = message.text or message.caption or "[Media/Sticker]"
+                        mirror_text = f"<blockquote><b>[GHOST WATCH: {chat_name}]</b>\n" \
+                                      f"<b>{sender_name}</b>: {text_content}</blockquote>"
+                        await client.send_message(owner_id, mirror_text)
+                    except Exception:
+                        pass
+
+        # Trigger Void Events (Observe & Blackbox)
+        if message.chat:
+            chat_title = message.chat.title or "Private"
+            sender_mention = message.from_user.mention if message.from_user else "System"
+            
+            if message.new_chat_members:
+                names = ", ".join(u.first_name for u in message.new_chat_members)
+                await trigger_void_event(client, "join", f"{names} joined {chat_title} (<code>{message.chat.id}</code>)")
+            elif message.left_chat_member:
+                await trigger_void_event(client, "leave", f"{message.left_chat_member.first_name} left {chat_title} (<code>{message.chat.id}</code>)")
+            elif message.text and message.text.startswith("/"):
+                await trigger_void_event(client, "command", f"{sender_mention} ran <code>{message.text[:60]}</code> in {chat_title} (<code>{message.chat.id}</code>)")
+
+        # Phantom Mode Command Deletion
+        if VoidState.phantom_active and user_id == Config.OWNER_ID:
+            if message.text and message.text.startswith("/"):
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+
         # 1. Registration
         if message.chat:
             await db.add_served_chat(message.chat.id)

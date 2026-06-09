@@ -6,6 +6,8 @@ from database.db import db
 OWNER_ID = Config.OWNER_ID
 
 async def is_sudo(_, __, message):
+    if not message.from_user:
+        return False
     if message.from_user.id == OWNER_ID:
         return True
     sudoers = await db.get_sudoers()
