@@ -26,6 +26,17 @@ sys_random = random.SystemRandom()
 queues = {} 
 auto_leave_tasks = {} 
 
+def get_formatted_proxy():
+    proxy = os.getenv("PROXY")
+    if not proxy:
+        return None
+    proxy = proxy.strip()
+    if not (proxy.startswith("http://") or proxy.startswith("https://") or proxy.startswith("socks5://") or proxy.startswith("socks4://")):
+        parts = proxy.split(":")
+        if len(parts) == 4:
+            return f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+    return proxy
+
 def is_playlist(url: str) -> bool:
     if "list=" in url or "playlist" in url:
         return True
@@ -119,7 +130,7 @@ def get_stream_info(query, is_video=False):
         'default_search': 'auto',
         'cookiefile': cookie_file
     }
-    proxy = os.getenv("PROXY")
+    proxy = get_formatted_proxy()
     if proxy:
         ydl_opts['proxy'] = proxy
     
@@ -280,7 +291,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 'quiet': True,
                 'cookiefile': "COOKIE/Youtube_Netscape.txt" if "spotify" not in query else "COOKIE/Spotify_Netscape.txt"
             }
-            proxy = os.getenv("PROXY")
+            proxy = get_formatted_proxy()
             if proxy:
                 ydl_opts['proxy'] = proxy
             with YoutubeDL(ydl_opts) as ydl:
@@ -644,7 +655,7 @@ async def song_download(client: Client, message: Message):
                 "preferredquality": "192"
             }]
         }
-        proxy = os.getenv("PROXY")
+        proxy = get_formatted_proxy()
         if proxy:
             ydl_opts['proxy'] = proxy
         
