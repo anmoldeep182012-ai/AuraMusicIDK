@@ -227,6 +227,57 @@ def extract_from_invidious(video_id, is_video=False):
             print(f"Invidious Extraction Error on {base}: {e}")
     return None
 
+def extract_from_cobalt(video_id, is_video=False):
+    cobalt_api = os.getenv("COBALT_API")
+    instances = []
+    if cobalt_api:
+        instances.append(cobalt_api.strip().rstrip("/"))
+    
+    # Fallback community instances
+    instances.extend([
+        "https://cobalt.adminforge.de",
+        "https://cobalt-api.adminforge.de",
+        "https://api.cobalt.tools"
+    ])
+    
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    for base in instances:
+        try:
+            url = base if base.endswith("/") else base + "/"
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            payload = {
+                "url": video_url,
+                "videoQuality": "720",
+                "downloadMode": "audio" if not is_video else "auto",
+                "audioFormat": "mp3"
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST"
+            )
+            import ssl
+            ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                stream_url = data.get("url")
+                if stream_url:
+                    return {
+                        "url": stream_url,
+                        "title": data.get("filename", "Cobalt Stream"),
+                        "duration_sec": 0,
+                        "thumbnail": None
+                    }
+        except Exception as e:
+            print(f"Cobalt Extraction Error on {base}: {e}")
+    return None
+
 def get_stream_info(query, is_video=False):
     # Determine which cookie file to use
     cookie_file = "COOKIE/Youtube_Netscape.txt"
@@ -294,9 +345,23 @@ def get_stream_info(query, is_video=False):
                 ydl_opts['format'] = "b" if is_video else "ba/b"
                 info = extract_with_opts(ydl_opts, query)
             except Exception:
-                # Alternate API Fallbacks (Piped / Invidious)
+                # Alternate API Fallbacks (Cobalt / Piped / Invidious)
                 video_id = get_video_id(query)
                 if video_id:
+                    cobalt_res = extract_from_cobalt(video_id, is_video)
+                    if cobalt_res:
+                        duration_sec = cobalt_res["duration_sec"]
+                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                        return {
+                            "url": cobalt_res["url"],
+                            "audio_url": None,
+                            "title": cobalt_res["title"],
+                            "duration": duration_min,
+                            "duration_sec": duration_sec,
+                            "thumbnail": cobalt_res["thumbnail"],
+                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                        }
+                    
                     piped_res = extract_from_piped(video_id, is_video)
                     if piped_res:
                         duration_sec = piped_res["duration_sec"]
@@ -863,7 +928,16 @@ async def song_download(client: Client, message: Message):
             video_id = get_video_id(link)
             fallback_success = False
             if video_id:
-                piped_res = extract_from_piped(video_id, is_video=False)
+                cobalt_res = extract_from_cobalt(video_id, is_video=False)
+                if cobalt_res and cobalt_res.get("url"):
+                    try:
+                        file_path = f"downloads/{video_id}.mp3"
+                        urllib.request.urlretrieve(cobalt_res["url"], file_path)
+                        fallback_success = True
+                    except:
+                        pass
+                if not fallback_success:
+                    piped_res = extract_from_piped(video_id, is_video=False)
                 if piped_res and piped_res.get("url"):
                     try:
                         file_path = f"downloads/{video_id}.mp3"
