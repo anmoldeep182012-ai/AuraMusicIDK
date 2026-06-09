@@ -44,7 +44,28 @@ def convert_json_to_netscape(json_file: str, output_file: str):
     
     try:
         with open(json_file, 'r', encoding='utf-8') as f:
-            cookies = json.load(f)
+            content = f.read().strip()
+            
+        if not content:
+            return None
+
+        # Check if the file is already in Netscape format
+        if "# Netscape HTTP Cookie File" in content or "\t" in content:
+            out_dir = os.path.dirname(output_file)
+            if out_dir and not os.path.exists(out_dir):
+                os.makedirs(out_dir, exist_ok=True)
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return output_file
+
+        # Attempt to clean up copy-paste junk (e.g., line numbers like '1,' before '[')
+        if not content.startswith('['):
+            first_bracket = content.find('[')
+            last_bracket = content.rfind(']')
+            if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
+                content = content[first_bracket:last_bracket+1]
+                
+        cookies = json.loads(content)
         
         # Ensure parent dir exists
         out_dir = os.path.dirname(output_file)
@@ -61,7 +82,14 @@ def convert_json_to_netscape(json_file: str, output_file: str):
                 flag = 'TRUE' if domain.startswith('.') else 'FALSE'
                 path = cookie.get('path', '/')
                 secure = 'TRUE' if cookie.get('secure', False) else 'FALSE'
-                expiration = int(cookie.get('expirationDate', 0))
+                
+                # Gracefully convert expiration to integer
+                exp_val = cookie.get('expirationDate', 0)
+                try:
+                    expiration = int(float(exp_val))
+                except (ValueError, TypeError):
+                    expiration = 0
+                    
                 name = cookie.get('name', '')
                 value = cookie.get('value', '')
                 
