@@ -119,6 +119,9 @@ def get_stream_info(query, is_video=False):
         'default_search': 'auto',
         'cookiefile': cookie_file
     }
+    proxy = os.getenv("PROXY")
+    if proxy:
+        ydl_opts['proxy'] = proxy
     
     def extract_with_opts(opts, q):
         with YoutubeDL(opts) as ydl:
@@ -277,6 +280,9 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 'quiet': True,
                 'cookiefile': "COOKIE/Youtube_Netscape.txt" if "spotify" not in query else "COOKIE/Spotify_Netscape.txt"
             }
+            proxy = os.getenv("PROXY")
+            if proxy:
+                ydl_opts['proxy'] = proxy
             with YoutubeDL(ydl_opts) as ydl:
                 # Offload blocking extraction to executor
                 pl_info = await loop.run_in_executor(executor, lambda: ydl.extract_info(query, False))
@@ -638,6 +644,9 @@ async def song_download(client: Client, message: Message):
                 "preferredquality": "192"
             }]
         }
+        proxy = os.getenv("PROXY")
+        if proxy:
+            ydl_opts['proxy'] = proxy
         
         # Ensure downloads dir exists
         if not os.path.exists("downloads"): os.makedirs("downloads")
