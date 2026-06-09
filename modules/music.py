@@ -140,16 +140,19 @@ def get_stream_info(query, is_video=False):
 
     try:
         info = extract_with_opts(ydl_opts, query)
-    except Exception as e:
+    except Exception as first_error:
         # Fallback: Try without cookies and relaxation
         ydl_opts.pop('cookiefile', None)
         ydl_opts['format'] = "bestvideo+bestaudio/best" if is_video else "bestaudio/best"
         try:
             info = extract_with_opts(ydl_opts, query)
         except Exception:
-            # Extreme Fallback
-            ydl_opts['format'] = "b" if is_video else "ba/b"
-            info = extract_with_opts(ydl_opts, query)
+            try:
+                # Extreme Fallback
+                ydl_opts['format'] = "b" if is_video else "ba/b"
+                info = extract_with_opts(ydl_opts, query)
+            except Exception:
+                raise first_error
 
     if 'entries' in info:
         data = info['entries'][0]
