@@ -1,0 +1,8 @@
+pyrotgfork
+tgcrypto
+python-dotenv
+aiohttp
+aiofiles
+pytgcalls
+yt-dlp
+youtube-search-python

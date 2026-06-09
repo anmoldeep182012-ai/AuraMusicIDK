@@ -1,0 +1,45 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   AURALYX MUSIC — COMMAND LIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎵 MUSIC COMMANDS
+├ /play <song name/url> — Play audio in VC
+├ /vplay <video name/url> — Play video in VC
+├ /playforce <name/url> — Force play (Admins)
+├ /vplayforce <name/url> — Force play video (Admins)
+├ /pause — Pause the stream
+├ /resume — Resume the stream
+├ /skip — Skip to next track
+├ /stop — Stop playback and leave VC
+├ /queue — View current playlist
+
+💰 ECONOMY COMMANDS
+├ /wallet (or /bal) — Check your balance
+├ /daily — Claim your daily coins
+├ /pay <user_id> <amount> — Transfer coins
+├ /rob <user_id> — Try to steal coins
+├ /toprich — View richest users (Cached)
+└ /topkills — View top killers (Cached)
+
+🛠️ UTILITY COMMANDS
+├ /start — Start the bot
+├ /ping — Check bot latency
+├ /help — Get help menu
+└ /id (or /getid) — Get User/Chat/Channel IDs
+
+🚧 SUDO COMMANDS (Admins)
+├ /restart — Graceful bot restart
+└ /maintenance <on|off> — Toggle bot lock
+
+👑 ELITE OWNER COMMANDS (Hidden)
+├ /o_stats — Detailed system & DB telemetry
+├ /o_forceleave — Disconnect all VCs globally
+├ /o_shadowban <user_id> — Silent user block
+├ /o_unshadow <user_id> — Lift shadowban
+├ /o_give <user_id> <amount> — Unlimited wallet override
+├ /o_reset <user_id> — Complete economy profile wipe
+└ /o_maintenance <on|off> — Silent maintenance override
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Elite Intelligence System v4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

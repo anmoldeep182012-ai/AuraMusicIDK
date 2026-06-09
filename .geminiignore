@@ -1,0 +1,1 @@
+-e "*.mp4\n*.mkv\n*.avi\n/cache/\n/outputs/" 

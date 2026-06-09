@@ -1,0 +1,12 @@
+# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file!  Do not edit.
+
+.spotify.com	TRUE	/	TRUE	1812385672	sp_t	7a7d2413-e6fa-49b3-a0aa-24b69b747102
+.spotify.com	TRUE	/	TRUE	1780851339	_cs_mk_ga	0.7543062781297802_1780849539230
+.spotify.com	TRUE	/	TRUE	1782059271	sp_dc	AQDiHBeWfkdT9O9MHyxOUV6Cvdq9iXznAch1zisORPd5mMiXBxzULm_V9gZ9b_XSgWXaOrrw7RlBzcl0089f8PsA0uG2gU4FB66gnmJCLCkUTD_JXFnup4VZlERGARpTZKuqNbfSocwpw-Bh2fK1s1u3Lzu0VAZ5y1Tbo3Qsp8vDSssY7KM0d5950FnSIE2otmnpNAahn1r5SPbLTGU
+.spotify.com	TRUE	/	TRUE	1786033672	sp_gaid	0088fc9b5f888e76ac2bbf8d4c8c2961225656997032016ad24f70
+.spotify.com	TRUE	/	TRUE	1780935933	sp_landing	https%3A%2F%2Fopen.spotify.com%2F
+.spotify.com	TRUE	/	TRUE	1780935933	sp_landingref	https%3A%2F%2Fwww.google.com%2F
+.spotify.com	TRUE	/	TRUE	1780935965	sp_m	in-en
+.spotify.com	TRUE	/	TRUE	1780935933	sp_new	1
