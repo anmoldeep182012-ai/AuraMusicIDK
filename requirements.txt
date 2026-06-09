@@ -7,3 +7,6 @@ py-tgcalls
 yt-dlp
 youtube-search-python
 asyncpg
+aiosqlite
+psutil
+Pillow
