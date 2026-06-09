@@ -117,6 +117,27 @@ async def init():
     # Initialize Database
     await db.init()
     
+    # Save Cookies from Env Variables if provided
+    youtube_cookie_env = os.getenv("YOUTUBE_COOKIE")
+    if youtube_cookie_env:
+        try:
+            os.makedirs("COOKIE", exist_ok=True)
+            with open("COOKIE/Youtube_Cookie.txt", "w", encoding="utf-8") as f:
+                f.write(youtube_cookie_env.strip())
+            logger.info("Loaded YouTube cookie from environment variable.")
+        except Exception as ce:
+            logger.error(f"Failed to save YOUTUBE_COOKIE from env: {ce}")
+
+    spotify_cookie_env = os.getenv("SPOTIFY_COOKIE")
+    if spotify_cookie_env:
+        try:
+            os.makedirs("COOKIE", exist_ok=True)
+            with open("COOKIE/Spotify_Cookie.txt", "w", encoding="utf-8") as f:
+                f.write(spotify_cookie_env.strip())
+            logger.info("Loaded Spotify cookie from environment variable.")
+        except Exception as ce:
+            logger.error(f"Failed to save SPOTIFY_COOKIE from env: {ce}")
+
     # Convert Cookies to Netscape Format
     convert_json_to_netscape("COOKIE/Youtube_Cookie.txt", "COOKIE/Youtube_Netscape.txt")
     convert_json_to_netscape("COOKIE/Spotify_Cookie.txt", "COOKIE/Spotify_Netscape.txt")
