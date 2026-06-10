@@ -584,9 +584,14 @@ async def play_logic(client: Client, message: Message, is_video=True):
                     [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
                 ])
                 try:
+                    sent = False
                     if local_videos:
-                        await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
-                    else:
+                        try:
+                            await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                            sent = True
+                        except Exception:
+                            pass
+                    if not sent:
                         await client.send_message(chat_id, queue_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
                     await m.delete()
                 except Exception as e:
@@ -627,15 +632,22 @@ async def play_logic(client: Client, message: Message, is_video=True):
                           f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {first['user']}\n</blockquote>\n" \
                           f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
             try:
+                sent = False
                 if local_videos:
-                    await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
-                elif first.get('thumbnail'):
                     try:
-                        await client.send_photo(chat_id=chat_id, photo=first['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                        await client.send_video(chat_id=chat_id, video=sys_random.choice(local_videos), caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                        sent = True
                     except Exception:
+                        pass
+                
+                if not sent:
+                    if first.get('thumbnail'):
+                        try:
+                            await client.send_photo(chat_id=chat_id, photo=first['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                        except Exception:
+                            await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+                    else:
                         await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
-                else:
-                    await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
                 await m.delete()
             except Exception as e:
                 try: await m.delete()
