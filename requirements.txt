@@ -10,3 +10,4 @@ asyncpg
 aiosqlite
 psutil
 Pillow
+httpx

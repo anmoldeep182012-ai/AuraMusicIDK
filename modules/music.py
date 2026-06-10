@@ -30,6 +30,17 @@ auto_leave_tasks = {}
 def get_formatted_proxy():
     proxy = os.getenv("PROXY")
     if not proxy:
+        proxy_file = "PROXY/Webshare 10 proxies.txt"
+        if os.path.exists(proxy_file):
+            try:
+                with open(proxy_file, "r") as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                    if lines:
+                        import random
+                        proxy = random.choice(lines)
+            except Exception as e:
+                print(f"Failed to read proxy file: {e}")
+    if not proxy:
         return None
     proxy = proxy.strip()
     if not (proxy.startswith("http://") or proxy.startswith("https://") or proxy.startswith("socks5://") or proxy.startswith("socks4://")):
@@ -171,7 +182,7 @@ def extract_from_piped(video_id, is_video=False):
         try:
             url = f"{base}/streams/{video_id}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_direct(req, timeout=3) as response:
+            with urlopen_with_proxy(req, timeout=3) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 selected_stream = None
                 if is_video:
@@ -226,7 +237,7 @@ def extract_from_invidious(video_id, is_video=False):
         try:
             url = f"{base}/api/v1/videos/{video_id}?local=true"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_direct(req, timeout=3) as response:
+            with urlopen_with_proxy(req, timeout=3) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 title = data.get("title", "Unknown")
                 duration_sec = data.get("lengthSeconds", 0)
@@ -303,7 +314,7 @@ def extract_from_cobalt(video_id, is_video=False):
             )
             import ssl
             ctx = ssl._create_unverified_context()
-            with urlopen_direct(req, context=ctx, timeout=8) as response:
+            with urlopen_with_proxy(req, context=ctx, timeout=8) as response:
                 data = json.loads(response.read().decode("utf-8"))
                 stream_url = data.get("url")
                 if stream_url:
