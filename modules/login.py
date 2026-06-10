@@ -178,9 +178,14 @@ async def finish_login(message: Message):
         
         music.userbot_connected = True
         
+        from helpers.utils import sync_served_chats_from_userbot
+        asyncio.create_task(sync_served_chats_from_userbot(music.userbot))
+        
         await message.reply_text(
             f"<blockquote>{fraktur('Authentication Successful')} ❞\n\n"
-            f"{small_caps('ѕᴇѕѕɪᴏɴ ѕᴛʀɪɴɢ ʜᴀѕ ʙᴇᴇɴ ᴜᴘᴅᴀᴛᴇᴅ ᴀɴᴅ ᴠᴏɪᴄᴇ ᴄʟɪᴇɴᴛ ѕᴛᴀʀᴛᴇᴅ.')}</blockquote>"
+            f"{small_caps('ѕᴇѕѕɪᴏɴ ѕᴛʀɪɴɢ ʜᴀѕ ʙᴇᴇɴ ᴜᴘᴅᴀᴛᴇᴅ ᴀɴᴅ ᴠᴏɪᴄᴇ ᴄʟɪᴇɴᴛ ѕᴛᴀʀᴛᴇᴅ.')}\n\n"
+            f"<b>{small_caps('ᴄᴏᴘʏ ᴛʜɪѕ ѕᴇѕѕɪᴏɴ ѕᴛʀɪɴɢ ᴀɴᴅ ᴀᴅᴅ ɪᴛ ᴛᴏ ʏᴏᴜʀ ʀᴀɪʟᴡᴀʏ ᴅᴀѕʜʙᴏᴀʀᴅ ᴀѕ')} <code>SESSION_STRING</code>:</b>\n\n"
+            f"<code>{session_string}</code></blockquote>"
         )
     except Exception as start_err:
         music.userbot_connected = False

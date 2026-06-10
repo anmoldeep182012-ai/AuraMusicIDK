@@ -101,3 +101,32 @@ def convert_json_to_netscape(json_file: str, output_file: str):
     except Exception as e:
         print(f"Cookie Conversion Error: {e}")
         return None
+
+async def sync_served_chats_from_userbot(userbot_client: Client):
+    """Sync all groups, channels and private chats from userbot dialogs to the database."""
+    try:
+        from database.db import db
+        from pyrogram import enums
+        
+        chat_count = 0
+        user_count = 0
+        
+        async for dialog in userbot_client.get_dialogs():
+            if not dialog.chat:
+                continue
+            chat_id = dialog.chat.id
+            chat_type = dialog.chat.type
+            
+            if chat_type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL]:
+                if chat_id not in db._served_chats:
+                    await db.add_served_chat(chat_id)
+                    chat_count += 1
+            elif chat_type == enums.ChatType.PRIVATE:
+                if chat_id not in db._served_users:
+                    await db.add_served_user(chat_id)
+                    user_count += 1
+                    
+        print(f"Synced {chat_count} chats and {user_count} users from userbot dialogs.")
+    except Exception as e:
+        print(f"Error syncing dialogs: {e}")
+

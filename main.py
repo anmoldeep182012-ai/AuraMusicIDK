@@ -35,7 +35,7 @@ from pyrogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotComman
 from pytgcalls import PyTgCalls
 from config import Config
 from database.db import db
-from helpers.utils import convert_json_to_netscape
+from helpers.utils import convert_json_to_netscape, sync_served_chats_from_userbot
 from helpers.styling import small_caps
 import modules.music as music
 from helpers.void_state import VoidState, trigger_void_event
@@ -180,6 +180,7 @@ async def init():
             await userbot.start()
             await call_py.start()
             music.userbot_connected = True
+            asyncio.create_task(sync_served_chats_from_userbot(userbot))
             logger.info("Userbot and Voice Client started successfully.")
         except Exception as userbot_err:
             logger.error(f"Userbot failed to start: {userbot_err}")

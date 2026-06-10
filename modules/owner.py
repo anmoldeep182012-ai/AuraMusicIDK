@@ -169,6 +169,38 @@ async def broadcast_handler(client: Client, message: Message):
                                f"<blockquote>{small_caps('ᴛᴏᴛᴀʟ ꜱᴜᴄᴄᴇꜱꜱ')}: {sent}\n" \
                                f"{small_caps('ᴛᴏᴛᴀʟ ꜰᴀɪʟᴜʀᴇꜱ')}: {failed}</blockquote>")
 
+@Client.on_message(filters.command("dbsync") & owner_only)
+async def dbsync_handler(client: Client, message: Message):
+    if not music.userbot_connected:
+        header = fraktur("Sync Error")
+        return await message.reply_text(
+            f"<blockquote>{header} ❞\n\n"
+            f"{small_caps('ᴜѕᴇʀʙᴏᴛ ɪѕ ɴᴏᴛ ᴄᴏɴɴᴇᴄᴛᴇᴅ. ᴘʟᴇᴀѕᴇ ʟᴏɢɪɴ ꜰɪʀѕᴛ.')}</blockquote>"
+        )
+        
+    status_msg = await message.reply_text(small_caps("ѕʏɴᴄɪɴɢ ᴅᴀᴛᴀʙᴀѕᴇ ᴡɪᴛʜ ᴜѕᴇʀʙᴏᴛ ᴅɪᴀʟᴏɢѕ..."))
+    
+    try:
+        from helpers.utils import sync_served_chats_from_userbot
+        await sync_served_chats_from_userbot(music.userbot)
+        
+        chats_count = len(await db.get_served_chats())
+        users_count = len(await db.get_served_users())
+        
+        header = fraktur("Sync Completed")
+        await status_msg.edit_text(
+            f"<blockquote>{header} ❞\n\n"
+            f"{small_caps('ᴅᴀᴛᴀʙᴀѕᴇ ʜᴀѕ ʙᴇᴇɴ ѕʏɴᴄᴇᴅ.')}\n\n"
+            f"» {small_caps('ᴛᴏᴛᴀʟ ᴄʜᴀᴛѕ')}: {chats_count}\n"
+            f"» {small_caps('ᴛᴏᴛᴀʟ ᴜѕᴇʀѕ')}: {users_count}</blockquote>"
+        )
+    except Exception as e:
+        header = fraktur("Sync Failed")
+        await status_msg.edit_text(
+            f"<blockquote>{header} ❞\n\n"
+            f"<code>{str(e)}</code></blockquote>"
+        )
+
 @Client.on_message(filters.command("restart") & owner_only)
 async def restart_handler(client: Client, message: Message):
     await message.reply_text(small_caps("ʀᴇꜱᴛᴀʀᴛɪɴɢ ʙᴏᴛ..."))
