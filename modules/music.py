@@ -506,16 +506,39 @@ async def leave_timer(chat_id, group_name):
             pass
 
 async def handle_error(chat_id, e):
-    error_str = str(e).lower()
-    if "chat_admin_required" in error_str or "USER_ADMIN_INVALID" in str(e):
+    error_str = str(e)
+    error_lower = error_str.lower()
+    
+    if "chat_admin_required" in error_lower or "USER_ADMIN_INVALID" in error_str:
         header = fraktur("Admin Rights Required")
-        body = "ᴛʜᴇ ʙᴏᴛ ɴᴇᴇᴅꜱ ᴛᴏ ʙᴇ ᴘʀᴏᴍᴏᴛᴇᴅ ᴛᴏ ᴀᴅᴍɪɴɪꜱᴛʀᴀᴛᴏʀ ᴡɪᴛʜ ᴛʜᴇ 'ɪɴᴠɪᴛᴇ ᴜꜱᴇʀꜱ' ᴘᴇʀᴍɪꜱꜱɪᴏɴ ᴛᴏ ᴀᴅᴅ ᴛʜᴇ ᴜꜱᴇʀʙᴏᴛ ᴛᴏ ᴛʜᴇ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ."
-    elif "voice_chat_not_started" in error_str or "no_active_group_call" in error_str:
+        body = "ᴛʜᴇ ʙᴏᴛ ɴᴇᴇᴅѕ ᴛᴏ ʙᴇ ᴘʀᴏᴍᴏᴛᴇᴅ ᴛᴏ ᴀᴅᴍɪɴɪѕᴛʀᴀᴛᴏʀ ᴡɪᴛʜ ᴛʜᴇ 'ɪɴᴠɪᴛᴇ ᴜѕᴇʀѕ' ᴘᴇʀᴍɪѕѕɪᴏɴ ᴛᴏ ᴀᴅᴅ ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ᴛᴏ ᴛʜᴇ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ."
+    elif "voice_chat_not_started" in error_lower or "no_active_group_call" in error_lower:
         header = fraktur("Voice Chat Offline")
-        body = "ᴀɴ ᴀᴅᴍɪɴɪꜱᴛʀᴀᴛᴏʀ ᴍᴜꜱᴛ ꜱᴛᴀʀᴛ ᴛʜᴇ ɢʀᴏᴜᴘ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ʙᴇꜰᴏʀᴇ ᴛʜᴇ ʙᴏᴛ ᴄᴀɴ ꜱᴛʀᴇᴀᴍ ᴍᴜꜱɪᴄ ᴏʀ ᴠɪᴅᴇᴏ."
+        body = "ᴀɴ ᴀᴅᴍɪɴɪѕᴛʀᴀᴛᴏʀ ᴍᴜѕᴛ ѕᴛᴀʀᴛ ᴛʜᴇ ɢʀᴏᴜᴘ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ʙᴇꜰᴏʀᴇ ᴛʜᴇ ʙᴏᴛ ᴄᴀɴ ѕᴛʀᴇᴀᴍ ᴍᴜѕɪᴄ ᴏʀ ᴠɪᴅᴇᴏ."
+    elif "auth_key_duplicated" in error_lower:
+        header = fraktur("Session Conflict")
+        body = "ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ѕᴇѕѕɪᴏɴ ɪѕ ᴀᴄᴛɪᴠᴇ ᴇʟѕᴇᴡʜᴇʀᴇ. ᴘʟᴇᴀѕᴇ ᴇɴѕᴜʀᴇ ɴᴏ ᴅᴜᴘʟɪᴄᴀᴛᴇ ɪɴѕᴛᴀɴᴄᴇѕ ᴏꜰ ᴛʜᴇ ʙᴏᴛ ᴀʀᴇ ʀᴜɴɴɪɴɢ."
+    elif "flood_wait" in error_lower:
+        header = fraktur("Flood Limit")
+        body = "ᴛᴇʟᴇɢʀᴀᴍ ʀᴀᴛᴇ-ʟɪᴍɪᴛ ᴇɴꜰᴏʀᴄᴇᴅ. ᴘʟᴇᴀѕᴇ ᴡᴀɪᴛ ᴀ ꜰᴇᴡ ᴍɪɴᴜᴛᴇѕ ʙᴇꜰᴏʀᴇ ᴛʀʏɪɴɢ ᴀɢᴀɪɴ."
+    elif "invite_hash_expired" in error_lower or "invite_hash_invalid" in error_lower:
+        header = fraktur("Invite Link Invalid")
+        body = "ᴛʜᴇ ᴄʜᴀᴛ ɪɴᴠɪᴛᴇ ʟɪɴᴋ ɪѕ ᴇxᴘɪʀᴇᴅ ᴏʀ ɪɴᴠᴀʟɪᴅ. ᴘʟᴇᴀѕᴇ ᴍᴀᴋᴇ ѕᴜʀᴇ ᴛʜᴇ ʙᴏᴛ ᴄᴀɴ ɪɴᴠɪᴛᴇ ᴜѕᴇʀѕ."
+    elif "channel_private" in error_lower:
+        header = fraktur("Private Chat")
+        body = "ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ᴄᴀɴɴᴏᴛ ᴀᴄᴄᴇѕѕ ᴛʜɪѕ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ. ᴘʟᴇᴀѕᴇ ᴀᴅᴅ ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ᴀᴄᴄᴏᴜɴᴛ ᴍᴀɴᴜᴀʟʟʏ."
+    elif "user_already_participant" in error_lower:
+        header = fraktur("Userbot Connected")
+        body = "ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ɪѕ ᴀʟʀᴇᴀᴅʏ ᴀ ᴍᴇᴍʙᴇʀ ᴏꜰ ᴛʜɪѕ ᴄʜᴀᴛ."
+    elif "video_not_found" in error_lower or "format is not available" in error_lower:
+        header = fraktur("Format Error")
+        body = "ᴛʜᴇ ʀᴇQᴜᴇѕᴛᴇᴅ ᴍᴇᴅɪᴀ ꜰᴏʀᴍᴀᴛ ɪѕ ɴᴏᴛ ᴀᴠᴀɪʟᴀʙʟᴇ."
+    elif "sign in to confirm you're not a bot" in error_lower:
+        header = fraktur("Youtube Blocked")
+        body = "ʏᴏᴜᴛᴜʙᴇ ɪѕ ʙʟᴏᴄᴋɪɴɢ ᴛʜᴇ ʀᴇQᴜᴇѕᴛ. ᴛʀʏ ᴘʟᴀʏɪɴɢ ѕᴏᴍᴇᴛʜɪɴɢ ᴇʟѕᴇ ᴏʀ ʀᴇꜰʀᴇѕʜ ᴄᴏᴏᴋɪᴇѕ."
     else:
         header = fraktur("Unexpected Error")
-        body = f"ᴀɴ ᴜɴᴋɴᴏᴡɴ ɪꜱꜱᴜᴇ ᴏᴄᴄᴜʀʀᴇᴅ: {str(e)[:100]}"
+        body = f"ᴀɴ ᴜɴᴋɴᴏᴡɴ ɪѕѕᴜᴇ ᴏᴄᴄᴜʀʀᴇᴅ: {error_str[:120]}"
     return f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>"
 
 async def play_logic(client: Client, message: Message, is_video=True):
