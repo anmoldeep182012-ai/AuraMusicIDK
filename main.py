@@ -40,9 +40,14 @@ import modules.music as music
 from helpers.void_state import VoidState, trigger_void_event
 
 # Configure logging
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("logs/bot.log", encoding="utf-8")
+    ]
 )
 logger = logging.getLogger(__name__)
 

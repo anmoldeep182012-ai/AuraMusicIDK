@@ -563,16 +563,31 @@ async def chats_list_handler(client: Client, message: Message):
     status_msg = await message.reply_text(small_caps("ꜰᴇᴛᴄʜɪɴɢ ᴄʜᴀᴛꜱ..."))
     try:
         groups = []
-        async for dialog in client.get_dialogs():
-            chat = dialog.chat
-            if chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL]:
-                count = chat.members_count
-                if count is None:
-                    try:
-                        count = await client.get_chat_members_count(chat.id)
-                    except Exception:
-                        count = 0
-                groups.append(f"• {chat.title} (<code>{chat.id}</code>) - {count} {small_caps('ᴍᴇᴍʙᴇʀꜱ')}")
+        if music.userbot:
+            async for dialog in music.userbot.get_dialogs():
+                chat = dialog.chat
+                if chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL]:
+                    count = chat.members_count
+                    if count is None:
+                        try:
+                            count = await music.userbot.get_chat_members_count(chat.id)
+                        except Exception:
+                            try:
+                                count = await client.get_chat_members_count(chat.id)
+                            except Exception:
+                                count = 0
+                    groups.append(f"• {chat.title} (<code>{chat.id}</code>) - {count} {small_caps('ᴍᴇᴍʙᴇʀꜱ')}")
+        else:
+            async for dialog in client.get_dialogs():
+                chat = dialog.chat
+                if chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP, enums.ChatType.CHANNEL]:
+                    count = chat.members_count
+                    if count is None:
+                        try:
+                            count = await client.get_chat_members_count(chat.id)
+                        except Exception:
+                            count = 0
+                    groups.append(f"• {chat.title} (<code>{chat.id}</code>) - {count} {small_caps('ᴍᴇᴍʙᴇʀꜱ')}")
         if not groups:
             return await status_msg.edit_text(small_caps("ᴛʜᴇ ʙᴏᴛ ɪꜱ ɴᴏᴛ ɪɴ ᴀɴʏ ɢʀᴏᴜᴘꜱ/ᴄʜᴀɴɴᴇʟꜱ."))
         header = fraktur("Bot Served Chats")
@@ -698,8 +713,23 @@ async def view_env_handler(client: Client, message: Message):
             env_vars.append(f"• <b>{k}</b>: <code>{val}</code>")
         header = fraktur("Environment Variables")
         body = "\n".join(env_vars)
-        await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
-                                 f"<blockquote>{body}</blockquote>")
+        full_text = f"<blockquote>{header} ❞</blockquote>\n<blockquote>{body}</blockquote>"
+        if len(full_text) > 4096:
+            file_path = "env_vars.txt"
+            plain_vars = []
+            for k, v in os.environ.items():
+                is_sensitive = any(sk in k.lower() for sk in sensitive_keys)
+                val = "[REDACTED]" if is_sensitive else v
+                plain_vars.append(f"{k}: {val}")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(plain_vars))
+            await message.reply_document(file_path, caption=small_caps("ᴇɴᴠɪʀᴏɴᴍᴇɴᴛ ᴠᴀʀɪᴀʙʟᴇꜱ"))
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        else:
+            await message.reply_text(full_text)
     except Exception as e:
         await message.reply_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
 
@@ -716,6 +746,72 @@ async def unique_users_handler(client: Client, message: Message):
                                  f"<blockquote>{body}</blockquote>")
     except Exception as e:
         await message.reply_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
+
+@Client.on_message(filters.command("o_userslist") & owner_only)
+async def users_list_handler(client: Client, message: Message):
+    status_msg = await message.reply_text(small_caps("ꜰᴇᴛᴄʜɪɴɢ ᴜꜱᴇʀꜱ ʟɪꜱᴛ..."))
+    try:
+        user_ids = await db.get_served_users()
+        if not user_ids:
+            return await status_msg.edit_text(small_caps("ɴᴏ ꜱᴇʀᴠᴇᴅ ᴜꜱᴇʀꜱ ꜰᴏᴜɴᴅ."))
+        
+        resolved_users = []
+        chunk_size = 100
+        for i in range(0, len(user_ids), chunk_size):
+            chunk = user_ids[i:i + chunk_size]
+            try:
+                users = await client.get_users(chunk)
+                if not isinstance(users, list):
+                    users = [users]
+                resolved_users.extend(users)
+            except Exception:
+                for uid in chunk:
+                    try:
+                        u = await client.get_users(uid)
+                        resolved_users.append(u)
+                    except Exception:
+                        pass
+        
+        user_lines = []
+        resolved_ids = {u.id for u in resolved_users}
+        
+        for u in resolved_users:
+            mention = u.mention(style=enums.ParseMode.HTML)
+            username = f"@{u.username}" if u.username else "ɴᴏ ᴜꜱᴇʀɴᴀᴍᴇ"
+            user_lines.append(f"• {mention} ({username}) - <code>{u.id}</code>")
+            
+        for uid in user_ids:
+            if uid not in resolved_ids:
+                user_lines.append(f"• ᴜɴᴋɴᴏᴡɴ ᴜꜱᴇʀ (ɴᴏ ᴜꜱᴇʀɴᴀᴍᴇ) - <code>{uid}</code>")
+                
+        header = fraktur("Bot Served Users")
+        body = "\n".join(user_lines[:100])
+        if len(user_lines) > 100:
+            body += f"\n\n... ᴀɴᴅ {len(user_lines) - 100} ᴍᴏʀᴇ ᴜꜱᴇʀꜱ."
+            
+        full_text = f"<blockquote>{header} ❞</blockquote>\n<blockquote>{body}</blockquote>"
+        if len(full_text) > 4096:
+            file_path = "users_list.txt"
+            plain_lines = []
+            for u in resolved_users:
+                username = f"@{u.username}" if u.username else "no_username"
+                name = f"{u.first_name} {u.last_name or ''}".strip()
+                plain_lines.append(f"{name} ({username}) - {u.id}")
+            for uid in user_ids:
+                if uid not in resolved_ids:
+                    plain_lines.append(f"Unknown User - {uid}")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(plain_lines))
+            await message.reply_document(file_path, caption=small_caps("ꜱᴇʀᴠᴇᴅ ᴜꜱᴇʀꜱ ʟɪꜱᴛ"))
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+            await status_msg.delete()
+        else:
+            await status_msg.edit_text(full_text)
+    except Exception as e:
+        await status_msg.edit_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
 
 @Client.on_message(filters.command("o_dbbackup") & owner_only)
 async def database_backup_handler(client: Client, message: Message):
@@ -811,7 +907,8 @@ async def owner_help_handler(client: Client, message: Message):
         f"• <code>/o_setbio &lt;ʙɪᴏ&gt;</code> - ᴜᴘᴅᴀᴛᴇ ʙᴏᴛ ᴀʙᴏᴜᴛ/ʙɪᴏ\n"
         f"• <code>/o_setdescription &lt;ᴅᴇꜱᴄ&gt;</code> - ᴜᴘᴅᴀᴛᴇ ʙᴏᴛ ᴅᴇꜱᴄʀɪᴘᴛɪᴏɴ\n"
         f"• <code>/o_env</code> - ꜱʜᴏᴡ ɴᴏɴ-ꜱᴇɴꜱɪᴛɪᴠᴇ ᴇɴᴠ ᴠᴀʀꜱ\n"
-        f"• <code>/o_users</code> - ꜱʜᴏᴡ ᴛᴏᴛᴀʟ ʀᴇɢɪꜱᴛᴇʀᴇᴅ ᴜꜱᴇʀꜱ\n\n"
+        f"• <code>/o_users</code> - ꜱʜᴏᴡ ᴛᴏᴛᴀʟ ʀᴇɢɪꜱᴛᴇʀᴇᴅ ᴜꜱᴇʀꜱ\n"
+        f"• <code>/o_userslist</code> - ʟɪꜱᴛ ᴀʟʟ ꜱᴇʀᴠᴇᴅ ᴜꜱᴇʀꜱ\n\n"
         
         f"» {small_caps('ꜱʏꜱᴛᴇᴍ ᴍᴏᴅᴇʀᴀᴛɪᴏɴ')}\n"
         f"• <code>/o_shadowban</code> / <code>/o_unshadow</code> - shadowban\n"

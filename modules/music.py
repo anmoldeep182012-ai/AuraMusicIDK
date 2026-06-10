@@ -348,7 +348,8 @@ def get_stream_info(query, is_video=False):
                 # Alternate API Fallbacks (Cobalt / Piped / Invidious)
                 video_id = get_video_id(query)
                 if video_id:
-                    cobalt_res = extract_from_cobalt(video_id, is_video)
+                    # Always retrieve video stream from fallbacks as it is more stable and compatible with PyTgCalls audio/video decoding
+                    cobalt_res = extract_from_cobalt(video_id, is_video=True)
                     if cobalt_res:
                         duration_sec = cobalt_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -359,10 +360,11 @@ def get_stream_info(query, is_video=False):
                             "duration": duration_min,
                             "duration_sec": duration_sec,
                             "thumbnail": cobalt_res["thumbnail"],
+                            "is_video": is_video,
                             "yt_url": f"https://www.youtube.com/watch?v={video_id}"
                         }
                     
-                    piped_res = extract_from_piped(video_id, is_video)
+                    piped_res = extract_from_piped(video_id, is_video=True)
                     if piped_res:
                         duration_sec = piped_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -373,10 +375,11 @@ def get_stream_info(query, is_video=False):
                             "duration": duration_min,
                             "duration_sec": duration_sec,
                             "thumbnail": piped_res["thumbnail"],
+                            "is_video": is_video,
                             "yt_url": f"https://www.youtube.com/watch?v={video_id}"
                         }
                     
-                    invidious_res = extract_from_invidious(video_id, is_video)
+                    invidious_res = extract_from_invidious(video_id, is_video=True)
                     if invidious_res:
                         duration_sec = invidious_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -387,6 +390,7 @@ def get_stream_info(query, is_video=False):
                             "duration": duration_min,
                             "duration_sec": duration_sec,
                             "thumbnail": invidious_res["thumbnail"],
+                            "is_video": is_video,
                             "yt_url": f"https://www.youtube.com/watch?v={video_id}"
                         }
                 raise first_error
