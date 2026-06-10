@@ -173,31 +173,40 @@ def extract_from_piped(video_id, is_video=False):
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urlopen_direct(req, timeout=3) as response:
                 data = json.loads(response.read().decode('utf-8'))
+                selected_stream = None
                 if is_video:
                     video_streams = [s for s in data.get("videoStreams", []) if not s.get("videoOnly", False)]
                     if video_streams:
-                        selected = video_streams[0]
+                        selected_stream = video_streams[0]
                         for s in video_streams:
                             quality = s.get("quality", "")
                             if "720p" in quality or "480p" in quality or "360p" in quality:
-                                selected = s
+                                selected_stream = s
                                 break
-                        return {
-                            "url": selected["url"],
-                            "title": data.get("title", "Unknown"),
-                            "duration_sec": data.get("duration", 0),
-                            "thumbnail": data.get("thumbnailUrl")
-                        }
                 else:
                     audio_streams = data.get("audioStreams", [])
                     if audio_streams:
-                        selected = audio_streams[-1]
-                        return {
-                            "url": selected["url"],
-                            "title": data.get("title", "Unknown"),
-                            "duration_sec": data.get("duration", 0),
-                            "thumbnail": data.get("thumbnailUrl")
-                        }
+                        for s in audio_streams:
+                            codec = s.get("codec", "").lower()
+                            mime = s.get("mimeType", "").lower()
+                            if "m4a" in codec or "m4a" in mime or "mp4" in mime:
+                                selected_stream = s
+                                break
+                        if not selected_stream:
+                            selected_stream = audio_streams[-1]
+                    
+                    if not selected_stream:
+                        video_streams = [s for s in data.get("videoStreams", []) if not s.get("videoOnly", False)]
+                        if video_streams:
+                            selected_stream = video_streams[0]
+                            
+                if selected_stream:
+                    return {
+                        "url": selected_stream["url"],
+                        "title": data.get("title", "Unknown"),
+                        "duration_sec": data.get("duration", 0),
+                        "thumbnail": data.get("thumbnailUrl")
+                    }
         except Exception as e:
             print(f"Piped Extraction Error on {base}: {e}")
     return None
@@ -224,27 +233,35 @@ def extract_from_invidious(video_id, is_video=False):
                 thumbnails = data.get("videoThumbnails", [])
                 thumbnail = thumbnails[0].get("url") if thumbnails else None
                 
+                selected_stream = None
                 if is_video:
                     format_streams = data.get("formatStreams", [])
                     if format_streams:
-                        selected = format_streams[-1]
-                        return {
-                            "url": selected["url"],
-                            "title": title,
-                            "duration_sec": duration_sec,
-                            "thumbnail": thumbnail
-                        }
+                        selected_stream = format_streams[-1]
                 else:
                     adaptive = data.get("adaptiveFormats", [])
                     audio_streams = [a for a in adaptive if "audio" in a.get("type", "").lower() or "audio" in a.get("mimeType", "").lower()]
                     if audio_streams:
-                        selected = audio_streams[0]
-                        return {
-                            "url": selected["url"],
-                            "title": title,
-                            "duration_sec": duration_sec,
-                            "thumbnail": thumbnail
-                        }
+                        for s in audio_streams:
+                            mime = s.get("mimeType", "").lower()
+                            if "m4a" in mime or "mp4" in mime or "aac" in mime:
+                                selected_stream = s
+                                break
+                        if not selected_stream:
+                            selected_stream = audio_streams[0]
+                    
+                    if not selected_stream:
+                        format_streams = data.get("formatStreams", [])
+                        if format_streams:
+                            selected_stream = format_streams[-1]
+                            
+                if selected_stream:
+                    return {
+                        "url": selected_stream["url"],
+                        "title": title,
+                        "duration_sec": duration_sec,
+                        "thumbnail": thumbnail
+                    }
         except Exception as e:
             print(f"Invidious Extraction Error on {base}: {e}")
     return None
@@ -371,7 +388,7 @@ def get_stream_info(query, is_video=False):
                 video_id = get_video_id(query)
                 if video_id:
                     # Always retrieve video stream from fallbacks as it is more stable and compatible with PyTgCalls audio/video decoding
-                    cobalt_res = extract_from_cobalt(video_id, is_video=True)
+                    cobalt_res = extract_from_cobalt(video_id, is_video=is_video)
                     if cobalt_res:
                         duration_sec = cobalt_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -386,7 +403,7 @@ def get_stream_info(query, is_video=False):
                             "yt_url": f"https://www.youtube.com/watch?v={video_id}"
                         }
                     
-                    piped_res = extract_from_piped(video_id, is_video=True)
+                    piped_res = extract_from_piped(video_id, is_video=is_video)
                     if piped_res:
                         duration_sec = piped_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -401,7 +418,7 @@ def get_stream_info(query, is_video=False):
                             "yt_url": f"https://www.youtube.com/watch?v={video_id}"
                         }
                     
-                    invidious_res = extract_from_invidious(video_id, is_video=True)
+                    invidious_res = extract_from_invidious(video_id, is_video=is_video)
                     if invidious_res:
                         duration_sec = invidious_res["duration_sec"]
                         duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
@@ -456,6 +473,8 @@ def create_media_stream(track: dict) -> MediaStream:
     kwargs = {}
     if track.get("is_video"):
         kwargs["video_parameters"] = VideoQuality.HD_720p
+    else:
+        kwargs["video_flags"] = MediaStream.Flags.IGNORE
     return MediaStream(
         track["url"],
         audio_path=track.get("audio_url"),
