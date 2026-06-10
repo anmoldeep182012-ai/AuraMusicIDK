@@ -173,8 +173,35 @@ async def init():
     
     # Start the clients
     await bot.start()
-    await userbot.start()
-    await call_py.start()
+    
+    music.userbot_connected = False
+    if Config.SESSION_STRING and Config.SESSION_STRING.strip() != "":
+        try:
+            await userbot.start()
+            await call_py.start()
+            music.userbot_connected = True
+            logger.info("Userbot and Voice Client started successfully.")
+        except Exception as userbot_err:
+            logger.error(f"Userbot failed to start: {userbot_err}")
+            try:
+                await bot.send_message(
+                    Config.OWNER_ID,
+                    f"<blockquote>{fraktur('Session Invalid')} ❞\n\n"
+                    f"{small_caps('ᴜѕᴇʀʙᴏᴛ ꜰᴀɪʟᴇᴅ ᴛᴏ ѕᴛᴀʀᴛ:')} <code>{str(userbot_err)[:100]}</code>\n\n"
+                    f"{small_caps('ᴘʟᴇᴀѕᴇ ᴜѕᴇ /ʟᴏɢɪɴ <ᴘʜᴏɴᴇ_ɴᴜᴍʙᴇʀ> ᴛᴏ ʀᴇ-ᴀᴜᴛʜᴇɴᴛɪᴄᴀᴛᴇ.')}</blockquote>"
+                )
+            except Exception as notify_err:
+                logger.error(f"Failed to notify owner: {notify_err}")
+    else:
+        logger.warning("No SESSION_STRING provided. Voice Chat streaming will be unavailable until owner logs in.")
+        try:
+            await bot.send_message(
+                Config.OWNER_ID,
+                f"<blockquote>{fraktur('Session Missing')} ❞\n\n"
+                f"{small_caps('ᴘʟᴇᴀѕᴇ ᴜѕᴇ /ʟᴏɢɪɴ <ᴘʜᴏɴᴇ_ɴᴜᴍʙᴇʀ> ᴛᴏ ɪɴɪᴛɪᴀᴛᴇ ʟᴏɢɪɴ.')}</blockquote>"
+            )
+        except Exception as notify_err:
+            logger.error(f"Failed to notify owner: {notify_err}")
 
     # Set Bot Commands programmatically
     try:

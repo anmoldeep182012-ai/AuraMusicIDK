@@ -110,6 +110,11 @@ async def fetch_gogoanime_stream(anime_query: str, episode: str):
 async def anime_play_handler(client: Client, message: Message):
     chat_id = message.chat.id
     
+    if not music.userbot_connected:
+        header = fraktur("Userbot Offline")
+        body = "ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ɪѕ ɴᴏᴛ ᴄᴏɴɴᴇᴄᴛᴇᴅ. ᴘʟᴇᴀѕᴇ ᴀѕᴋ ᴛʜᴇ ᴏᴡɴᴇʀ ᴛᴏ ʟᴏɢ ɪɴ ᴜѕɪɴɢ /ʟᴏɢɪɴ."
+        return await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+    
     # Check permissions (admins only, or handle Toggle/Auth bypass similar to music.py)
     user_id = message.from_user.id if message.from_user else None
     if user_id:

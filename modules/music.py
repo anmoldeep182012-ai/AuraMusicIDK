@@ -20,6 +20,7 @@ from helpers.utils import animator
 # To be initialized in main.py
 pytgcalls: PyTgCalls = None
 userbot: Client = None
+userbot_connected = False
 executor = ThreadPoolExecutor(max_workers=5)
 sys_random = random.SystemRandom()
 
@@ -542,6 +543,11 @@ async def handle_error(chat_id, e):
     return f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>"
 
 async def play_logic(client: Client, message: Message, is_video=True):
+    if not userbot_connected:
+        header = fraktur("Userbot Offline")
+        body = "ᴛʜᴇ ᴜѕᴇʀʙᴏᴛ ɪѕ ɴᴏᴛ ᴄᴏɴɴᴇᴄᴛᴇᴅ. ᴘʟᴇᴀѕᴇ ᴀѕᴋ ᴛʜᴇ ᴏᴡɴᴇʀ ᴛᴏ ʟᴏɢ ɪɴ ᴜѕɪɴɢ /ʟᴏɢɪɴ."
+        return await client.send_message(message.chat.id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+
     if len(message.command) < 2:
         header = fraktur("Usage Instruction")
         body = f"ᴘʟᴇᴀꜱᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ʟɪɴᴋ ᴏʀ ᴀ ꜱᴏɴɢ ɴᴀᴍᴇ.\nᴜꜱᴀɢᴇ: /ᴠᴘʟᴀʏ <ɴᴀᴍᴇ/ʟɪɴᴋ>"
