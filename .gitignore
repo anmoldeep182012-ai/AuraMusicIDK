@@ -1,0 +1,16 @@
+.env
+*.session
+*.session-shm
+*.session-wal
+tg_bot.db
+__pycache__/
+downloads/
+logs/
+COOKIE/
+*.webp
+FFMPEG/
+proxy/
+PROXY/
+.python-version
+.python-version.tmp
+gemini session
