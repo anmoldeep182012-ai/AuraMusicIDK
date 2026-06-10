@@ -171,7 +171,7 @@ async def broadcast_handler(client: Client, message: Message):
 
 @Client.on_message(filters.command("dbsync") & owner_only)
 async def dbsync_handler(client: Client, message: Message):
-    if not music.userbot_connected:
+    if not music.userbot or not music.userbot.is_connected:
         header = fraktur("Sync Error")
         return await message.reply_text(
             f"<blockquote>{header} ❞\n\n"
