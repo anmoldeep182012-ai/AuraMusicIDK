@@ -171,9 +171,18 @@ async def finish_login(message: Message):
         except:
             pass
             
-        # Reconnect with new session
-        music.userbot.session_string = session_string
+        # Reconnect with new session by creating a new Client and PyTgCalls instance
+        music.userbot = Client(
+            "MusicUserbot",
+            api_id=Config.API_ID,
+            api_hash=Config.API_HASH,
+            session_string=session_string
+        )
         await music.userbot.start()
+        
+        from pytgcalls import PyTgCalls
+        music.pytgcalls = PyTgCalls(music.userbot)
+        music.init_handlers(music.pytgcalls)
         await music.pytgcalls.start()
         
         music.userbot_connected = True
