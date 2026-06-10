@@ -31,6 +31,7 @@ def patch_httpx():
 patch_httpx()
 
 from pyrogram import Client, idle, StopPropagation
+from pyrogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
 from pytgcalls import PyTgCalls
 from config import Config
 from database.db import db
@@ -174,6 +175,54 @@ async def init():
     await bot.start()
     await userbot.start()
     await call_py.start()
+
+    # Set Bot Commands programmatically
+    try:
+        group_commands = [
+            BotCommand("play", "PLAY AUDIO IN VC"),
+            BotCommand("vplay", "PLAY VIDEO IN VC"),
+            BotCommand("playforce", "FORCE PLAY AUDIO IN VC"),
+            BotCommand("vplayforce", "FORCE PLAY VIDEO IN VC"),
+            BotCommand("pause", "PAUSE CURRENT STREAM"),
+            BotCommand("resume", "RESUME CURRENT STREAM"),
+            BotCommand("skip", "SKIP TO NEXT TRACK"),
+            BotCommand("stop", "STOP PLAYBACK AND LEAVE VC"),
+            BotCommand("queue", "VIEW CURRENT PLAYLIST"),
+            BotCommand("loop", "TOGGLE PLAYBACK LOOP"),
+            BotCommand("shuffle", "SHUFFLE PLAYLIST"),
+            BotCommand("volume", "ADJUST STREAM VOLUME"),
+            BotCommand("seek", "SEEK FORWARD IN TRACK"),
+            BotCommand("seekback", "SEEK BACKWARD IN TRACK"),
+            BotCommand("settings", "ADJUST MUSIC SETTINGS"),
+            BotCommand("admins", "VIEW VOICE CHAT ADMINS"),
+            BotCommand("ban", "BAN USER FROM GROUP"),
+            BotCommand("unban", "UNBAN USER FROM GROUP"),
+            BotCommand("mute", "MUTE USER IN GROUP"),
+            BotCommand("unmute", "UNMUTE USER IN GROUP"),
+            BotCommand("warn", "WARN USER IN GROUP"),
+            BotCommand("warnings", "VIEW USER WARNINGS"),
+            BotCommand("purge", "PURGE MESSAGES"),
+            BotCommand("tagall", "TAG ALL MEMBERS")
+        ]
+        
+        private_commands = [
+            BotCommand("start", "START THE BOT"),
+            BotCommand("help", "VIEW HELP AND COMMANDS"),
+            BotCommand("ping", "CHECK BOT LATENCY"),
+            BotCommand("wallet", "CHECK COIN BALANCE"),
+            BotCommand("daily", "CLAIM DAILY COINS"),
+            BotCommand("toprich", "VIEW RICHEST USERS"),
+            BotCommand("topkills", "VIEW TOP KILLERS"),
+            BotCommand("sudolist", "VIEW SUDO USERS"),
+            BotCommand("id", "GET USER OR CHAT ID"),
+            BotCommand("info", "GET USER DETAILED INFO")
+        ]
+
+        await bot.set_bot_commands(group_commands, scope=BotCommandScopeAllGroupChats())
+        await bot.set_bot_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
+        logger.info("Bot commands successfully registered for all group and private chats.")
+    except Exception as cmd_err:
+        logger.error(f"Failed to set bot commands: {cmd_err}")
 
     # Global Chat Registration & State Enforcement Middleware
     @bot.on_message(group=-1)
