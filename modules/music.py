@@ -49,6 +49,11 @@ def urlopen_with_proxy(req, timeout=8, context=None):
     opener = urllib.request.build_opener(*handlers)
     return opener.open(req, timeout=timeout)
 
+def urlopen_direct(req, timeout=8, context=None):
+    if context is not None:
+        return urllib.request.urlopen(req, timeout=timeout, context=context)
+    return urllib.request.urlopen(req, timeout=timeout)
+
 def is_playlist(url: str) -> bool:
     if "list=" in url or "playlist" in url:
         return True
@@ -112,7 +117,7 @@ def get_dynamic_piped_instances():
     try:
         url = "https://raw.githubusercontent.com/TeamPiped/documentation/main/content/docs/public-instances/index.md"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urlopen_with_proxy(req, timeout=5) as response:
+        with urlopen_direct(req, timeout=5) as response:
             content = response.read().decode('utf-8')
             apis = re.findall(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[a-zA-Z0-9.-]+)*', content)
             seen = set()
@@ -123,6 +128,12 @@ def get_dynamic_piped_instances():
                 if ("pipedapi" in x or "piped-api" in x or "api.piped" in x) and x not in seen:
                     seen.add(x)
                     cleaned.append(x)
+            # Prioritize known working instances
+            priority = ["https://api.piped.private.coffee"]
+            for p in priority:
+                if p in cleaned:
+                    cleaned.remove(p)
+                cleaned.insert(0, p)
             return cleaned
     except Exception as e:
         print(f"Failed to fetch Piped instances: {e}")
@@ -132,7 +143,7 @@ def get_dynamic_invidious_instances():
     try:
         url = "https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urlopen_with_proxy(req, timeout=5) as response:
+        with urlopen_direct(req, timeout=5) as response:
             content = response.read().decode('utf-8')
             domains = re.findall(r'\*\s*\[([^\]]+)\]\(https?://[^)]+\)', content)
             cleaned = []
@@ -156,11 +167,11 @@ def extract_from_piped(video_id, is_video=False):
             "https://pipedapi.adminforge.de",
             "https://api.piped.yt",
         ]
-    for base in piped_instances[:6]:
+    for base in piped_instances[:12]:
         try:
             url = f"{base}/streams/{video_id}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_with_proxy(req, timeout=5) as response:
+            with urlopen_direct(req, timeout=3) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 if is_video:
                     video_streams = [s for s in data.get("videoStreams", []) if not s.get("videoOnly", False)]
@@ -202,11 +213,11 @@ def extract_from_invidious(video_id, is_video=False):
             "https://invidious.tiekoetter.com",
             "https://invidious.f5.si",
         ]
-    for base in invidious_instances[:6]:
+    for base in invidious_instances[:12]:
         try:
             url = f"{base}/api/v1/videos/{video_id}?local=true"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_with_proxy(req, timeout=5) as response:
+            with urlopen_direct(req, timeout=3) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 title = data.get("title", "Unknown")
                 duration_sec = data.get("lengthSeconds", 0)
@@ -275,7 +286,7 @@ def extract_from_cobalt(video_id, is_video=False):
             )
             import ssl
             ctx = ssl._create_unverified_context()
-            with urlopen_with_proxy(req, context=ctx, timeout=8) as response:
+            with urlopen_direct(req, context=ctx, timeout=8) as response:
                 data = json.loads(response.read().decode("utf-8"))
                 stream_url = data.get("url")
                 if stream_url:
@@ -299,7 +310,7 @@ def get_stream_info(query, is_video=False):
     if "spotify.com/track" in query or "spotify.com/playlist" in query or "spotify.com/album" in query:
         try:
             req = urllib.request.Request(query, headers={'User-Agent': 'Mozilla/5.0'})
-            html = urlopen_with_proxy(req).read().decode('utf-8')
+            html = urlopen_direct(req).read().decode('utf-8')
             title_match = re.search(r'<title>(.*?)</title>', html)
             if title_match:
                 scrape_title = title_match.group(1).replace('| Spotify', '').replace('Song by', '').replace('Playlist by', '').strip()
