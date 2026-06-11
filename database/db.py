@@ -744,7 +744,8 @@ class Database:
     # Stream caching helpers
     async def get_cached_stream(self, query: str, is_video: bool) -> dict:
         if self.is_mongo:
-            doc = await self.c_stream_cache.find_one({"_id": query, "is_video": is_video})
+            cache_id = f"{query}_{is_video}"
+            doc = await self.c_stream_cache.find_one({"_id": cache_id})
             if doc:
                 return {
                     "url": doc["url"],
@@ -783,8 +784,10 @@ class Database:
     async def set_cached_stream(self, query: str, track_info: dict):
         if self.is_mongo:
             from datetime import datetime
+            cache_id = f"{query}_{track_info['is_video']}"
             doc = {
-                "_id": query,
+                "_id": cache_id,
+                "query": query,
                 "url": track_info["url"],
                 "audio_url": track_info.get("audio_url"),
                 "title": track_info["title"],
@@ -795,7 +798,7 @@ class Database:
                 "yt_url": track_info.get("yt_url"),
                 "created_at": datetime.utcnow()
             }
-            await self.c_stream_cache.replace_one({"_id": query, "is_video": track_info["is_video"]}, doc, upsert=True)
+            await self.c_stream_cache.replace_one({"_id": cache_id}, doc, upsert=True)
         else:
             import time
             now = int(time.time())
