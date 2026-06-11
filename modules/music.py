@@ -235,6 +235,69 @@ def get_dynamic_invidious_instances():
         print(f"Failed to fetch Invidious instances: {e}")
     return []
 
+def search_alt_piped(query):
+    piped_instances = get_dynamic_piped_instances()
+    if not piped_instances:
+        piped_instances = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.leptons.xyz",
+            "https://pipedapi.nosebs.ru",
+            "https://piped-api.privacy.com.de",
+            "https://pipedapi.adminforge.de",
+            "https://api.piped.yt",
+        ]
+    import urllib.parse
+    encoded_query = urllib.parse.quote_plus(query)
+    for base in piped_instances[:8]:
+        try:
+            url = f"{base}/search?q={encoded_query}&filter=videos"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urlopen_with_proxy(req, timeout=4) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                results = data.get("items", [])
+                for item in results:
+                    if item.get("type") == "stream" and item.get("url"):
+                        video_id = get_video_id(item["url"])
+                        if video_id:
+                            return video_id
+        except Exception as e:
+            print(f"Piped Search Error on {base}: {e}")
+    return None
+
+def search_alt_invidious(query):
+    invidious_instances = get_dynamic_invidious_instances()
+    if not invidious_instances:
+        invidious_instances = [
+            "https://inv.nadeko.net",
+            "https://invidious.nerdvpn.de",
+            "https://inv.thepixora.com",
+            "https://yt.chocolatemoo53.com",
+            "https://invidious.tiekoetter.com",
+            "https://invidious.f5.si",
+        ]
+    import urllib.parse
+    encoded_query = urllib.parse.quote_plus(query)
+    for base in invidious_instances[:8]:
+        try:
+            url = f"{base}/api/v1/search?q={encoded_query}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urlopen_with_proxy(req, timeout=4) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                for item in data:
+                    if item.get("type") == "video" and item.get("videoId"):
+                        return item["videoId"]
+        except Exception as e:
+            print(f"Invidious Search Error on {base}: {e}")
+    return None
+
+def search_youtube_alt(query):
+    # Try Piped search first
+    video_id = search_alt_piped(query)
+    if video_id:
+        return video_id
+    # Try Invidious search fallback
+    return search_alt_invidious(query)
+
 def extract_from_piped(video_id, is_video=False):
     piped_instances = get_dynamic_piped_instances()
     if not piped_instances:
@@ -482,13 +545,22 @@ def get_stream_info(query, is_video=False):
         if query.startswith("sc:"):
             query = f"scsearch1:{query[3:].strip()}"
         else:
+            resolved_link = None
             try:
                 search = VideosSearch(query, limit=1)
                 res = search.result()
                 if res and res.get("result"):
-                    query = res["result"][0]["link"]
-            except:
-                pass
+                    resolved_link = res["result"][0]["link"]
+            except Exception as e:
+                print(f"VideosSearch failed: {e}")
+            
+            if resolved_link:
+                query = resolved_link
+            else:
+                # Fallback to alternative search APIs (Piped / Invidious search) as MAIN search fallback
+                resolved_id = search_youtube_alt(query)
+                if resolved_id:
+                    query = f"https://www.youtube.com/watch?v={resolved_id}"
 
     video_id = get_video_id(query)
     if video_id:
