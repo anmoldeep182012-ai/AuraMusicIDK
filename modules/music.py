@@ -714,15 +714,17 @@ async def get_stream_info_cached(query, is_video=False):
     return info
 
 def create_media_stream(track: dict) -> MediaStream:
-    kwargs = {}
+    kwargs = {
+        "audio_parameters": AudioQuality.MEDIUM,
+        "ffmpeg_parameters": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+    }
     if track.get("is_video"):
-        kwargs["video_parameters"] = VideoQuality.HD_720p
+        kwargs["video_parameters"] = VideoQuality.SD_360p
     else:
         kwargs["video_flags"] = MediaStream.Flags.IGNORE
     return MediaStream(
         track["url"],
         audio_path=track.get("audio_url"),
-        audio_parameters=AudioQuality.HIGH,
         **kwargs
     )
 
