@@ -373,6 +373,25 @@ def get_jiosaavn_stream_info(query: str):
     return None
 
 def get_stream_info(query, is_video=False):
+    # Direct Stream Link Bypass (Bypass yt-dlp entirely for raw URLs)
+    lower_query = query.lower()
+    if query.startswith(("http://", "https://")) and (
+        any(ext in lower_query for ext in [".mp4", ".mkv", ".m3u8", ".mp3", ".m4a", ".aac"]) or 
+        any(param in lower_query for param in [".mp4?", ".m3u8?", ".mp3?"])
+    ):
+        filename = query.split("/")[-1].split("?")[0]
+        title = filename if filename else "Direct Stream"
+        return {
+            "url": query,
+            "audio_url": None,
+            "title": title,
+            "duration": "Live" if ".m3u8" in lower_query else "00:00",
+            "duration_sec": 0,
+            "thumbnail": None,
+            "is_video": is_video or any(ext in lower_query for ext in [".mp4", ".mkv", ".m3u8"]),
+            "yt_url": query
+        }
+
     if query.startswith("saavn:"):
         saavn_query = query[6:].strip()
         info = get_jiosaavn_stream_info(saavn_query)
