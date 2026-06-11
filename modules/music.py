@@ -5,6 +5,7 @@ from pytgcalls.types import MediaStream, Update, StreamEnded, AudioQuality, Vide
 from youtubesearchpython import VideosSearch
 from yt_dlp import YoutubeDL
 import os
+import time
 import asyncio
 import random
 import urllib.request
@@ -29,6 +30,33 @@ sys_random = random.SystemRandom()
 queues = {} 
 auto_leave_tasks = {} 
 
+# Proxy Circuit Breaker state
+proxy_failures = 0
+last_proxy_failure = 0
+PROXY_COOLDOWN = 300  # 5 minutes
+
+def mark_proxy_failure():
+    global proxy_failures, last_proxy_failure
+    proxy_failures += 1
+    last_proxy_failure = time.time()
+    print(f"Proxy failure marked. Consecutive failures: {proxy_failures}")
+
+def mark_proxy_success():
+    global proxy_failures
+    if proxy_failures > 0:
+        proxy_failures = 0
+        print("Proxy success marked. Resetting failure counter.")
+
+def get_active_proxy():
+    global proxy_failures, last_proxy_failure
+    if proxy_failures >= 3:
+        elapsed = time.time() - last_proxy_failure
+        if elapsed < PROXY_COOLDOWN:
+            return None
+        else:
+            proxy_failures = 0
+    return get_formatted_proxy()
+
 def get_formatted_proxy():
     proxy = os.getenv("PROXY")
     if not proxy:
@@ -52,15 +80,18 @@ def get_formatted_proxy():
     return proxy
 
 def urlopen_with_proxy(req, timeout=8, context=None):
-    proxy_url = get_formatted_proxy()
+    proxy_url = get_active_proxy()
     if proxy_url:
         try:
             handlers = [urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})]
             if context is not None:
                 handlers.append(urllib.request.HTTPSHandler(context=context))
             opener = urllib.request.build_opener(*handlers)
-            return opener.open(req, timeout=timeout)
+            res = opener.open(req, timeout=timeout)
+            mark_proxy_success()
+            return res
         except Exception as proxy_err:
+            mark_proxy_failure()
             print(f"Proxy connection failed ({proxy_err}), falling back to direct connection.")
             
     # Direct fallback: Reconstruct request to remove proxy mutations if req is a Request object
@@ -459,7 +490,64 @@ def get_stream_info(query, is_video=False):
             except:
                 pass
 
-    # Resilient Format Selection
+    video_id = get_video_id(query)
+    if video_id:
+        # Try alternate APIs (Cobalt / Piped / Invidious) FIRST as main
+        try:
+            cobalt_res = extract_from_cobalt(video_id, is_video=is_video)
+            if cobalt_res:
+                duration_sec = cobalt_res.get("duration_sec", 0)
+                duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                return {
+                    "url": cobalt_res["url"],
+                    "audio_url": None,
+                    "title": cobalt_res["title"],
+                    "duration": duration_min,
+                    "duration_sec": duration_sec,
+                    "thumbnail": cobalt_res.get("thumbnail"),
+                    "is_video": is_video,
+                    "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                }
+        except Exception as e:
+            print(f"Cobalt Main Extraction failed: {e}")
+
+        try:
+            piped_res = extract_from_piped(video_id, is_video=is_video)
+            if piped_res:
+                duration_sec = piped_res.get("duration_sec", 0)
+                duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                return {
+                    "url": piped_res["url"],
+                    "audio_url": None,
+                    "title": piped_res["title"],
+                    "duration": duration_min,
+                    "duration_sec": duration_sec,
+                    "thumbnail": piped_res.get("thumbnail"),
+                    "is_video": is_video,
+                    "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                }
+        except Exception as e:
+            print(f"Piped Main Extraction failed: {e}")
+
+        try:
+            invidious_res = extract_from_invidious(video_id, is_video=is_video)
+            if invidious_res:
+                duration_sec = invidious_res.get("duration_sec", 0)
+                duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                return {
+                    "url": invidious_res["url"],
+                    "audio_url": None,
+                    "title": invidious_res["title"],
+                    "duration": duration_min,
+                    "duration_sec": duration_sec,
+                    "thumbnail": invidious_res.get("thumbnail"),
+                    "is_video": is_video,
+                    "yt_url": f"https://www.youtube.com/watch?v={video_id}"
+                }
+        except Exception as e:
+            print(f"Invidious Main Extraction failed: {e}")
+
+    # Fallback: yt-dlp Extraction
     if is_video:
         # Prefer MP4 at 720p, else any combined/split best
         format_str = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/bestvideo+bestaudio/best"
@@ -483,7 +571,7 @@ def get_stream_info(query, is_video=False):
             }
         }
     }
-    proxy = get_formatted_proxy()
+    proxy = get_active_proxy()
     if proxy:
         ydl_opts['proxy'] = proxy
     
@@ -505,56 +593,8 @@ def get_stream_info(query, is_video=False):
                 # Extreme Fallback
                 ydl_opts['format'] = "b" if is_video else "ba/b"
                 info = extract_with_opts(ydl_opts, query)
-            except Exception:
-                # Alternate API Fallbacks (Cobalt / Piped / Invidious)
-                video_id = get_video_id(query)
-                if video_id:
-                    # Always retrieve video stream from fallbacks as it is more stable and compatible with PyTgCalls audio/video decoding
-                    cobalt_res = extract_from_cobalt(video_id, is_video=is_video)
-                    if cobalt_res:
-                        duration_sec = cobalt_res["duration_sec"]
-                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
-                        return {
-                            "url": cobalt_res["url"],
-                            "audio_url": None,
-                            "title": cobalt_res["title"],
-                            "duration": duration_min,
-                            "duration_sec": duration_sec,
-                            "thumbnail": cobalt_res["thumbnail"],
-                            "is_video": is_video,
-                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
-                        }
-                    
-                    piped_res = extract_from_piped(video_id, is_video=is_video)
-                    if piped_res:
-                        duration_sec = piped_res["duration_sec"]
-                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
-                        return {
-                            "url": piped_res["url"],
-                            "audio_url": None,
-                            "title": piped_res["title"],
-                            "duration": duration_min,
-                            "duration_sec": duration_sec,
-                            "thumbnail": piped_res["thumbnail"],
-                            "is_video": is_video,
-                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
-                        }
-                    
-                    invidious_res = extract_from_invidious(video_id, is_video=is_video)
-                    if invidious_res:
-                        duration_sec = invidious_res["duration_sec"]
-                        duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
-                        return {
-                            "url": invidious_res["url"],
-                            "audio_url": None,
-                            "title": invidious_res["title"],
-                            "duration": duration_min,
-                            "duration_sec": duration_sec,
-                            "thumbnail": invidious_res["thumbnail"],
-                            "is_video": is_video,
-                            "yt_url": f"https://www.youtube.com/watch?v={video_id}"
-                        }
-                raise first_error
+            except Exception as last_error:
+                raise last_error
 
     if 'entries' in info:
         data = info['entries'][0]
