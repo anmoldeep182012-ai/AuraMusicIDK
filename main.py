@@ -169,6 +169,7 @@ async def init():
     call_py = PyTgCalls(userbot)
     music.pytgcalls = call_py
     music.userbot = userbot
+    music.bot = bot
     music.init_handlers(call_py) # Register events
     
     # Start the clients

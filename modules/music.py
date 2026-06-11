@@ -20,6 +20,7 @@ from helpers.utils import animator
 # To be initialized in main.py
 pytgcalls: PyTgCalls = None
 userbot: Client = None
+bot: Client = None
 userbot_connected = False
 executor = ThreadPoolExecutor(max_workers=5)
 sys_random = random.SystemRandom()
@@ -1206,17 +1207,49 @@ def init_handlers(pytg: PyTgCalls):
     async def stream_handler(client: PyTgCalls, update: Update):
         if isinstance(update, StreamEnded):
             chat_id = update.chat_id
-            if chat_id in queues:
-                # Loop logic
-                if chat_id in loops and loops[chat_id]:
-                    # If loop is enabled, don't pop, just play the same track again
+            if chat_id not in queues:
+                return
+
+            async def play_next_track():
+                if not queues[chat_id]:
+                    # Queue is empty, schedule auto-leave
+                    auto_leave_tasks[chat_id] = asyncio.create_task(leave_timer(chat_id, "this group"))
+                    return
+                
+                next_t = queues[chat_id][0]
+                try:
+                    await client.play(chat_id, create_media_stream(next_t))
+                except Exception as play_err:
+                    print(f"Auto-play failed for track '{next_t.get('title', 'Unknown')}': {play_err}")
+                    
+                    # Notify group chat using the bot client
+                    try:
+                        if bot:
+                            header = fraktur("Stream Error")
+                            body = f"ᴛʜᴇ ѕᴛʀᴇᴀᴍ ʟɪɴᴋ ꜰᴏʀ <b>{next_t.get('title', 'Unknown')}</b> ɪѕ ʙʀᴏᴋᴇɴ. ѕᴋɪᴘᴘɪɴɢ..."
+                            await bot.send_message(chat_id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+                    except Exception as notify_err:
+                        print(f"Failed to notify stream error: {notify_err}")
+                    
+                    # Pop the broken track and recursively try the next one
                     if queues[chat_id]:
-                        next_t = queues[chat_id][0]
+                        queues[chat_id].pop(0)
+                    await play_next_track()
+
+            # Loop logic
+            if chat_id in loops and loops[chat_id]:
+                # If loop is enabled, don't pop, just play the same track again
+                if queues[chat_id]:
+                    next_t = queues[chat_id][0]
+                    try:
                         await client.play(chat_id, create_media_stream(next_t))
                         return
+                    except Exception:
+                        # If playing the loop track fails, turn off loop and fall through to play next
+                        loops[chat_id] = False
 
-                if queues[chat_id]: queues[chat_id].pop(0)
-                if queues[chat_id]: 
-                    next_t = queues[chat_id][0]
-                    await client.play(chat_id, create_media_stream(next_t))
-                else: auto_leave_tasks[chat_id] = asyncio.create_task(leave_timer(chat_id, "this group"))
+            # Pop the completed track
+            if queues[chat_id]:
+                queues[chat_id].pop(0)
+
+            await play_next_track()
