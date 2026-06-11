@@ -63,7 +63,36 @@ def urlopen_with_proxy(req, timeout=8, context=None):
         except Exception as proxy_err:
             print(f"Proxy connection failed ({proxy_err}), falling back to direct connection.")
             
-    # Direct fallback
+    # Direct fallback: Reconstruct request to remove proxy mutations if req is a Request object
+    if isinstance(req, urllib.request.Request):
+        headers = dict(req.headers)
+        # Remove any proxy headers
+        for h in list(headers.keys()):
+            if h.lower().startswith('proxy-'):
+                del headers[h]
+        
+        method = getattr(req, 'method', None)
+        if method is None and hasattr(req, 'get_method'):
+            try:
+                method = req.get_method()
+            except Exception:
+                pass
+
+        fallback_req = urllib.request.Request(
+            req.full_url,
+            data=req.data,
+            headers=headers,
+            origin_req_host=req.origin_req_host,
+            unverifiable=req.unverifiable,
+            method=method
+        )
+        if hasattr(req, 'unredirected_hdrs'):
+            fallback_req.unredirected_hdrs = {
+                k: v for k, v in req.unredirected_hdrs.items()
+                if not k.lower().startswith('proxy-')
+            }
+        req = fallback_req
+
     if context is not None:
         return urllib.request.urlopen(req, timeout=timeout, context=context)
     return urllib.request.urlopen(req, timeout=timeout)
