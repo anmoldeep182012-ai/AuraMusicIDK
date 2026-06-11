@@ -694,7 +694,7 @@ async def handle_error(chat_id, e):
     elif "video_not_found" in error_lower or "format is not available" in error_lower:
         header = fraktur("Format Error")
         body = "ᴛʜᴇ ʀᴇQᴜᴇѕᴛᴇᴅ ᴍᴇᴅɪᴀ ꜰᴏʀᴍᴀᴛ ɪѕ ɴᴏᴛ ᴀᴠᴀɪʟᴀʙʟᴇ."
-    elif "sign in to confirm you're not a bot" in error_lower:
+    elif "sign in to confirm" in error_lower or ("confirm" in error_lower and "not a bot" in error_lower):
         header = fraktur("Youtube Blocked")
         body = "ʏᴏᴜᴛᴜʙᴇ ɪѕ ʙʟᴏᴄᴋɪɴɢ ᴛʜᴇ ʀᴇQᴜᴇѕᴛ. ᴛʀʏ ᴘʟᴀʏɪɴɢ ѕᴏᴍᴇᴛʜɪɴɢ ᴇʟѕᴇ ᴏʀ ʀᴇꜰʀᴇѕʜ ᴄᴏᴏᴋɪᴇѕ."
     else:
