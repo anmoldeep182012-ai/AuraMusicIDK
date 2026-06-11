@@ -52,14 +52,20 @@ def get_formatted_proxy():
 
 def urlopen_with_proxy(req, timeout=8, context=None):
     proxy_url = get_formatted_proxy()
-    handlers = []
     if proxy_url:
-        handlers.append(urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url}))
+        try:
+            handlers = [urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})]
+            if context is not None:
+                handlers.append(urllib.request.HTTPSHandler(context=context))
+            opener = urllib.request.build_opener(*handlers)
+            return opener.open(req, timeout=timeout)
+        except Exception as proxy_err:
+            print(f"Proxy connection failed ({proxy_err}), falling back to direct connection.")
+            
+    # Direct fallback
     if context is not None:
-        handlers.append(urllib.request.HTTPSHandler(context=context))
-        
-    opener = urllib.request.build_opener(*handlers)
-    return opener.open(req, timeout=timeout)
+        return urllib.request.urlopen(req, timeout=timeout, context=context)
+    return urllib.request.urlopen(req, timeout=timeout)
 
 def urlopen_direct(req, timeout=8, context=None):
     if context is not None:
@@ -385,8 +391,9 @@ def get_stream_info(query, is_video=False):
     try:
         info = extract_with_opts(ydl_opts, query)
     except Exception as first_error:
-        # Fallback: Try without cookies and relaxation
+        # Fallback: Try without cookies, proxy, and relaxation
         ydl_opts.pop('cookiefile', None)
+        ydl_opts.pop('proxy', None)
         ydl_opts['format'] = "bestvideo+bestaudio/best" if is_video else "bestaudio/best"
         try:
             info = extract_with_opts(ydl_opts, query)
