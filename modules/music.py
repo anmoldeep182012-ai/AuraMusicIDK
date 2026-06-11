@@ -335,7 +335,51 @@ def extract_from_cobalt(video_id, is_video=False):
             print(f"Cobalt Extraction Error on {base}: {e}")
     return None
 
+def get_jiosaavn_stream_info(query: str):
+    """Fetch direct stream URL from JioSaavn public API."""
+    try:
+        import urllib.request
+        import json
+        import urllib.parse
+        encoded_query = urllib.parse.quote_plus(query)
+        url = f"https://saavn.dev/api/search/songs?query={encoded_query}"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'})
+        
+        with urlopen_with_proxy(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data.get("success") and data.get("data") and data["data"].get("results"):
+                song = data["data"]["results"][0]
+                download_urls = song.get("downloadUrl", [])
+                if download_urls:
+                    direct_url = download_urls[-1].get("url")
+                    duration_sec = int(song.get("duration", 0))
+                    duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+                    images = song.get("image", [])
+                    thumbnail = images[-1].get("url") if images else None
+                    
+                    return {
+                        "url": direct_url,
+                        "audio_url": None,
+                        "title": song.get("name", "JioSaavn Track"),
+                        "duration": duration_min,
+                        "duration_sec": duration_sec,
+                        "thumbnail": thumbnail,
+                        "is_video": False,
+                        "yt_url": f"https://www.jiosaavn.com/song/{song.get('id')}"
+                    }
+    except Exception as e:
+        print(f"JioSaavn Extraction Error: {e}")
+    return None
+
 def get_stream_info(query, is_video=False):
+    if query.startswith("saavn:"):
+        saavn_query = query[6:].strip()
+        info = get_jiosaavn_stream_info(saavn_query)
+        if info:
+            return info
+        query = saavn_query
+
     # Determine which cookie file to use
     cookie_file = "COOKIE/Youtube_Netscape.txt"
     if "spotify.com" in query:
@@ -355,13 +399,16 @@ def get_stream_info(query, is_video=False):
     
     # Fast Search Optimization
     if not (query.startswith("http") or query.startswith("www")):
-        try:
-            search = VideosSearch(query, limit=1)
-            res = search.result()
-            if res and res.get("result"):
-                query = res["result"][0]["link"]
-        except:
-            pass
+        if query.startswith("sc:"):
+            query = f"scsearch1:{query[3:].strip()}"
+        else:
+            try:
+                search = VideosSearch(query, limit=1)
+                res = search.result()
+                if res and res.get("result"):
+                    query = res["result"][0]["link"]
+            except:
+                pass
 
     # Resilient Format Selection
     if is_video:
