@@ -11,3 +11,5 @@ class Config:
     DB_PATH = os.getenv("DB_PATH", "tg_bot.db")
     SESSION_STRING = os.getenv("SESSION_STRING", "")
     DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+    MONGO_URI = os.getenv("MONGO_URI", "")
+

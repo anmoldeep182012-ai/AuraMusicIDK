@@ -11,3 +11,5 @@ aiosqlite
 psutil
 Pillow
 httpx
+motor
+pymongo

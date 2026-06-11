@@ -562,6 +562,16 @@ def get_stream_info(query, is_video=False):
         "yt_url": yt_url
     }
 
+async def get_stream_info_cached(query, is_video=False):
+    cached = await db.get_cached_stream(query, is_video)
+    if cached:
+        return cached
+    loop = asyncio.get_event_loop()
+    info = await loop.run_in_executor(executor, get_stream_info, query, is_video)
+    if info:
+        await db.set_cached_stream(query, info)
+    return info
+
 def create_media_stream(track: dict) -> MediaStream:
     kwargs = {}
     if track.get("is_video"):
@@ -705,19 +715,24 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 pl_info = await loop.run_in_executor(executor, lambda: ydl.extract_info(query, False))
                 if 'entries' in pl_info:
                     entries = list(pl_info['entries'])
+                    pl_tracks = []
                     for entry in entries:
                         url = entry.get('url') or entry.get('webpage_url')
                         if url:
-                            queues[chat_id].append({"url": url, "audio_url": None, "title": entry.get('title', 'Unknown'), "duration": "PL", "user": message.from_user.mention(style=enums.ParseMode.HTML), "is_video": is_video, "thumbnail": None, "yt_url": url})
+                            track_item = {"url": url, "audio_url": None, "title": entry.get('title', 'Unknown'), "duration": "PL", "user": message.from_user.mention(style=enums.ParseMode.HTML), "is_video": is_video, "thumbnail": None, "yt_url": url}
+                            queues[chat_id].append(track_item)
+                            pl_tracks.append(track_item)
+                    await db.add_multiple_to_queue(chat_id, pl_tracks)
                     header = fraktur("Playlist Queued")
                     body = f"ᴀᴅᴅᴇᴅ {len(entries)} ᴛʀᴀᴄᴋꜱ ᴛᴏ ᴛʜᴇ Qᴜᴇᴜᴇ.\n\nᴛʏᴘᴇ /Qᴜᴇᴜᴇ ᴛᴏ ᴠɪᴇᴡ."
                     await animator.safe_edit(client, chat_id, m.id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
                 else: raise Exception("No entries found in playlist.")
         else:
-            info = await loop.run_in_executor(executor, get_stream_info, query, is_video)
+            info = await get_stream_info_cached(query, is_video)
             info['user'] = message.from_user.mention(style=enums.ParseMode.HTML)
             is_playing = len(queues[chat_id]) > 0
             queues[chat_id].append(info)
+            await db.add_to_queue(chat_id, info)
             if is_playing:
                 pos = len(queues[chat_id]) - 1
                 header = small_caps('ᴀᴅᴅᴇᴅ ᴛᴏ Qᴜᴇᴜᴇ ᴀᴛ')
@@ -754,9 +769,10 @@ async def play_logic(client: Client, message: Message, is_video=True):
         if len(queues[chat_id]) > 0:
             first = queues[chat_id][0]
             if first.get('duration') == "PL":
-                first = await loop.run_in_executor(executor, get_stream_info, first['url'], is_video)
+                first = await get_stream_info_cached(first['url'], is_video)
                 first['user'] = message.from_user.mention(style=enums.ParseMode.HTML)
                 queues[chat_id][0] = first
+                await db.set_queue(chat_id, queues[chat_id])
 
             # Optimization: Force separate streams for high-quality AV sync
             stream = create_media_stream(first)
@@ -844,7 +860,9 @@ async def playlist_command(client: Client, message: Message):
             if not tracks: return await message.reply_text(small_caps("ᴘʟᴀʏʟɪꜱᴛ ɪꜱ ᴇᴍᴘᴛʏ."))
             chat_id = message.chat.id
             if chat_id not in queues: queues[chat_id] = []
-            for t in tracks: queues[chat_id].append({"url": t['url'], "audio_url": None, "title": t['title'], "duration": "PL", "user": message.from_user.mention, "is_video": True, "thumbnail": None, "yt_url": t['url']})
+            new_tracks = [{"url": t['url'], "audio_url": None, "title": t['title'], "duration": "PL", "user": message.from_user.mention, "is_video": True, "thumbnail": None, "yt_url": t['url']} for t in tracks]
+            queues[chat_id].extend(new_tracks)
+            await db.add_multiple_to_queue(chat_id, new_tracks)
             await message.reply_text(f"<blockquote>{fraktur('Queued')} ❞\n\n{small_caps('ᴘʟᴀʏʟɪꜱᴛ ᴀᴅᴅᴇᴅ')}</blockquote>")
             if len(queues[chat_id]) == len(tracks): await play_logic(client, message, is_video=True)
     except Exception as e: await message.reply_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
@@ -893,12 +911,14 @@ async def player_panel(client: Client, message: Message):
 async def play_force(client: Client, message: Message):
     chat_id = message.chat.id
     if chat_id in queues: queues[chat_id] = []
+    await db.clear_queue(chat_id)
     await play_logic(client, message, is_video=False)
 
 @Client.on_message(filters.command(["vplayforce", "vpf"]) & admin)
 async def vplay_force(client: Client, message: Message):
     chat_id = message.chat.id
     if chat_id in queues: queues[chat_id] = []
+    await db.clear_queue(chat_id)
     await play_logic(client, message, is_video=True)
 
 @Client.on_message(filters.command("admins") & filters.group)
@@ -1165,6 +1185,7 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
         if chat_id not in queues or not queues[chat_id]: return await callback_query.answer(small_caps("ɴᴏᴛʜɪɴɢ ɪꜱ ᴘʟᴀʏɪɴɢ"))
         try:
             queues[chat_id].pop(0)
+            await db.remove_first_track(chat_id)
             if queues[chat_id]:
                 next_track = queues[chat_id][0]
                 await pytgcalls.play(chat_id, create_media_stream(next_track))
@@ -1176,6 +1197,7 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
         except: await pytgcalls.resume(chat_id); await callback_query.answer(small_caps("ʀᴇꜱᴜᴍᴇᴅ"))
     elif data == "stop":
         if chat_id in queues: queues[chat_id] = []
+        await db.clear_queue(chat_id)
         try: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
         except Exception as e: await client.send_message(chat_id, f"<blockquote>{fraktur('Error')} ❞</blockquote>")
     await callback_query.answer()
@@ -1186,6 +1208,7 @@ async def skip_music(client: Client, message: Message):
     if chat_id not in queues or not queues[chat_id]: return await client.send_message(chat_id, f"<blockquote>{fraktur('Queue Empty')} ❞</blockquote>")
     try:
         queues[chat_id].pop(0)
+        await db.remove_first_track(chat_id)
         if queues[chat_id]: 
             next_t = queues[chat_id][0]
             await pytgcalls.play(chat_id, create_media_stream(next_t))
@@ -1196,6 +1219,7 @@ async def skip_music(client: Client, message: Message):
 @Client.on_message(filters.command(["stop", "end", "cstop"]) & admin)
 async def stop_music(client: Client, message: Message):
     if message.chat.id in queues: queues[message.chat.id] = []
+    await db.clear_queue(message.chat.id)
     try: await pytgcalls.leave_call(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
     except Exception as e: await client.send_message(message.chat.id, await handle_error(message.chat.id, e))
 
@@ -1234,6 +1258,7 @@ def init_handlers(pytg: PyTgCalls):
                     # Pop the broken track and recursively try the next one
                     if queues[chat_id]:
                         queues[chat_id].pop(0)
+                        await db.remove_first_track(chat_id)
                     await play_next_track()
 
             # Loop logic
@@ -1251,5 +1276,6 @@ def init_handlers(pytg: PyTgCalls):
             # Pop the completed track
             if queues[chat_id]:
                 queues[chat_id].pop(0)
+                await db.remove_first_track(chat_id)
 
             await play_next_track()

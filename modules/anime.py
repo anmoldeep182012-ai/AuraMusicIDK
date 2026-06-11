@@ -212,6 +212,7 @@ async def anime_play_handler(client: Client, message: Message):
         # Clear music queue to avoid conflicts
         if chat_id in music.queues:
             music.queues[chat_id] = []
+        await db.clear_queue(chat_id)
             
         header = fraktur("Anime Playback")
         body = f"ɴᴏᴡ ѕᴛʀᴇᴀᴍɪɴɢ: {anime_query}\nᴇᴘɪѕᴏᴅᴇ: {episode}\nʟᴀɴɢᴜᴀɢᴇ: {small_caps('ʜɪɴᴅɪ') if flag == '-hi' else small_caps('ᴇɴɢʟɪѕʜ')}"
