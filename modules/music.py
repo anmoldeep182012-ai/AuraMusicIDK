@@ -378,7 +378,14 @@ def get_stream_info(query, is_video=False):
         'source_address': '0.0.0.0',
         'noplaylist': True,
         'default_search': 'auto',
-        'cookiefile': cookie_file
+        'cookiefile': cookie_file,
+        'nocheckcertificate': True,
+        'extractor_args': {
+            'youtube': {
+                'protocols': ['dashy'],
+                'player_client': ['android', 'web']
+            }
+        }
     }
     proxy = get_formatted_proxy()
     if proxy:
