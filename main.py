@@ -368,10 +368,34 @@ async def init():
     await userbot.stop()
     await bot.stop()
 
+async def log_startup_error(err_msg):
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        mongo_uri = os.getenv("MONGO_URI") or Config.MONGO_URI
+        if mongo_uri and mongo_uri.startswith(("mongodb://", "mongodb+srv://")):
+            client = AsyncIOMotorClient(mongo_uri)
+            db = client["music_bot_db"]
+            col = db["startup_logs"]
+            import datetime
+            await col.insert_one({
+                "timestamp": datetime.datetime.utcnow(),
+                "error": err_msg,
+                "env": "Railway" if os.getenv("RAILWAY_STATIC_URL") else "Local"
+            })
+            print("Successfully logged startup error to MongoDB.")
+    except Exception as e:
+        print(f"Failed to log startup error to MongoDB: {e}")
+
 if __name__ == "__main__":
     try:
         asyncio.run(init())
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        logger.error(f"Error occurred: {e}")
+        import traceback
+        err_msg = traceback.format_exc()
+        logger.error(f"Error occurred: {err_msg}")
+        try:
+            asyncio.run(log_startup_error(err_msg))
+        except:
+            pass
