@@ -13,6 +13,28 @@ from helpers.styling import small_caps, fraktur
 from database.db import db
 import modules.music as music
 
+@Client.on_message(filters.command("update_ytdlp") & owner_only)
+async def update_ytdlp_handler(client: Client, message: Message):
+    m = await message.reply_text(small_caps("ᴜᴘᴅᴀᴛɪɴɢ ʏᴛ-ᴅʟᴘ ᴀɴᴅ ᴘʏᴛᴜʙᴇꜰɪx..."))
+    try:
+        import subprocess
+        process = await asyncio.create_subprocess_shell(
+            "pip install -U yt-dlp pytubefix",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        
+        header = fraktur("Update Success") if process.returncode == 0 else fraktur("Update Failed")
+        out = stdout.decode().strip()[-200:] or stderr.decode().strip()[-200:]
+        
+        await m.edit_text(
+            f"<blockquote>{header} ❞\n\n"
+            f"<code>{out}</code></blockquote>"
+        )
+    except Exception as e:
+        await m.edit_text(f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
+
 @Client.on_message(filters.command("addsudo") & owner_only)
 async def add_sudo_handler(client: Client, message: Message):
     try:

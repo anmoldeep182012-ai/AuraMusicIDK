@@ -32,13 +32,13 @@ sys_random = random.SystemRandom()
 # Queue and Auto-Leave Management
 queues = {} 
 auto_leave_tasks = {} 
+user_cooldowns = {}
 
 async def get_stream_info_cached(query, is_video=False):
     cached = await db.get_cached_stream(query, is_video)
     if cached:
         return cached
-    loop = asyncio.get_event_loop()
-    info = await loop.run_in_executor(executor, get_stream_info, query, is_video)
+    info = await get_stream_info(query, is_video)
     if info:
         await db.set_cached_stream(query, info)
     return info
@@ -76,6 +76,8 @@ async def leave_timer(chat_id, group_name):
     if chat_id in queues and not queues[chat_id]:
         try:
             await pytgcalls.leave_call(chat_id)
+            queues.pop(chat_id, None)
+            auto_leave_tasks.pop(chat_id, None)
             await userbot.send_message(
                 chat_id,
                 f"» {small_caps('ɴᴏ ᴍᴏʀᴇ Qᴜᴇᴜᴇᴅ ᴛʀᴀᴄᴋꜱ, ʟᴇᴀᴠɪɴɢ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ')}."
@@ -133,6 +135,16 @@ async def play_logic(client: Client, message: Message, is_video=True):
     chat_id = message.chat.id
     user_id = message.from_user.id if message.from_user else None
     
+    # Rate Limiting (5 seconds)
+    if user_id:
+        now = time.time()
+        if user_id in user_cooldowns:
+            if now - user_cooldowns[user_id] < 5:
+                header = fraktur("Rate Limited")
+                body = "ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ ᴀ ꜰᴇᴡ ꜱᴇᴄᴏɴᴅꜱ ʙᴇꜰᴏʀᴇ ʀᴇQᴜᴇꜱᴛɪɴɢ ᴀɴᴏᴛʜᴇʀ ꜱᴏɴɢ."
+                return await client.send_message(chat_id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+        user_cooldowns[user_id] = now
+
     if user_id:
         sudoers_list = await db.get_sudoers()
         is_sudoer = (user_id == Config.OWNER_ID or user_id in sudoers_list)
@@ -686,15 +698,23 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
                 next_track = queues[chat_id][0]
                 await pytgcalls.play(chat_id, create_media_stream(next_track))
                 await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
-            else: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ɴᴏ ᴍᴏʀᴇ ᴛʀᴀᴄᴋꜱ')}</blockquote>")
+            else:
+                await pytgcalls.leave_call(chat_id)
+                queues.pop(chat_id, None)
+                auto_leave_tasks.pop(chat_id, None)
+                await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ɴᴏ ᴍᴏʀᴇ ᴛʀᴀᴄᴋѕ')}</blockquote>")
         except Exception as e: await client.send_message(chat_id, f"<blockquote>{fraktur('Error')} ❞\n\n{small_caps(str(e))}</blockquote>")
     elif data == "pause":
-        try: await pytgcalls.pause(chat_id); await callback_query.answer(small_caps("ᴘᴀᴜꜱᴇᴅ"))
-        except: await pytgcalls.resume(chat_id); await callback_query.answer(small_caps("ʀᴇꜱᴜᴍᴇᴅ"))
+        try: await pytgcalls.pause(chat_id); await callback_query.answer(small_caps("ᴘᴀᴜѕᴇᴅ"))
+        except: await pytgcalls.resume(chat_id); await callback_query.answer(small_caps("ʀᴇѕᴜᴍᴇᴅ"))
     elif data == "stop":
         if chat_id in queues: queues[chat_id] = []
         await db.clear_queue(chat_id)
-        try: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
+        try:
+            await pytgcalls.leave_call(chat_id)
+            queues.pop(chat_id, None)
+            auto_leave_tasks.pop(chat_id, None)
+            await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
         except Exception as e: await client.send_message(chat_id, f"<blockquote>{fraktur('Error')} ❞</blockquote>")
     await callback_query.answer()
 
@@ -709,14 +729,22 @@ async def skip_music(client: Client, message: Message):
             next_t = queues[chat_id][0]
             await pytgcalls.play(chat_id, create_media_stream(next_t))
             await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
-        else: await pytgcalls.leave_call(chat_id); await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ʟᴇᴀᴠɪɴɢ')}</blockquote>")
+        else:
+            await pytgcalls.leave_call(chat_id)
+            queues.pop(chat_id, None)
+            auto_leave_tasks.pop(chat_id, None)
+            await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞\n\n{small_caps('ʟᴇᴀᴠɪɴɢ')}</blockquote>")
     except Exception as e: await client.send_message(chat_id, await handle_error(chat_id, e))
 
 @Client.on_message(filters.command(["stop", "end", "cstop"]) & admin)
 async def stop_music(client: Client, message: Message):
     if message.chat.id in queues: queues[message.chat.id] = []
     await db.clear_queue(message.chat.id)
-    try: await pytgcalls.leave_call(message.chat.id); await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
+    try:
+        await pytgcalls.leave_call(message.chat.id)
+        queues.pop(message.chat.id, None)
+        auto_leave_tasks.pop(message.chat.id, None)
+        await client.send_message(message.chat.id, f"<blockquote>{fraktur('Stream Stopped')} ❞</blockquote>")
     except Exception as e: await client.send_message(message.chat.id, await handle_error(message.chat.id, e))
 
 @Client.on_callback_query(filters.regex("close_panel"))

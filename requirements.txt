@@ -3,8 +3,9 @@ tgcrypto
 python-dotenv
 aiohttp
 aiofiles
-py-tgcalls==2.3.0
+py-tgcalls>=2.3.0
 yt-dlp[default]
+pytubefix
 youtube-search-python
 asyncpg
 aiosqlite
@@ -13,3 +14,4 @@ Pillow
 httpx
 motor
 pymongo
+sclib

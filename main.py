@@ -364,6 +364,7 @@ async def init():
     await idle()
     
     # Stop the clients
+    music.executor.shutdown(wait=False)
     await call_py.stop()
     await userbot.stop()
     await bot.stop()
