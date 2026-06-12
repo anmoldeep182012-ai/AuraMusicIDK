@@ -494,6 +494,8 @@ def extract_from_cobalt(video_id, is_video=False):
     
     # Fallback community instances
     instances.extend([
+        "https://dog.kittycat.boo",
+        "https://rue-cobalt.xenon.zone",
         "https://cobalt.adminforge.de",
         "https://cobalt-api.adminforge.de",
         "https://api.cobalt.tools"
