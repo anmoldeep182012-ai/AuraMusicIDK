@@ -19,16 +19,8 @@ async def is_admin(_, __, message):
     if not message.chat or message.chat.type not in [enums.ChatType.SUPERGROUP, enums.ChatType.GROUP]:
         return False
     
-    # Global Checks
     user_id = message.from_user.id if message.from_user else None
     if not user_id: return False
-
-    # Maintenance Check (Only Owner and Sudoers can bypass)
-    is_maint = await db.get_setting("maintenance")
-    if is_maint == "true":
-        sudoers_list = await db.get_sudoers()
-        if user_id != OWNER_ID and user_id not in sudoers_list:
-            return False
 
     # Owner and Sudoers always allowed
     if user_id == OWNER_ID:

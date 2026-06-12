@@ -131,24 +131,27 @@ async def finish_login(message: Message):
     # Save locally
     Config.SESSION_STRING = session_string
     
-    env_file = ".env"
-    if os.path.exists(env_file):
-        try:
-            with open(env_file, "r") as f:
-                lines = f.readlines()
-            
-            with open(env_file, "w") as f:
-                found = False
-                for line in lines:
-                    if line.startswith("SESSION_STRING="):
+    def update_env():
+        env_file = ".env"
+        if os.path.exists(env_file):
+            try:
+                with open(env_file, "r") as f:
+                    lines = f.readlines()
+                
+                with open(env_file, "w") as f:
+                    found = False
+                    for line in lines:
+                        if line.startswith("SESSION_STRING="):
+                            f.write(f"SESSION_STRING={session_string}\n")
+                            found = True
+                        else:
+                            f.write(line)
+                    if not found:
                         f.write(f"SESSION_STRING={session_string}\n")
-                        found = True
-                    else:
-                        f.write(line)
-                if not found:
-                    f.write(f"SESSION_STRING={session_string}\n")
-        except Exception as file_err:
-            print(f"Failed to update .env: {file_err}")
+            except Exception as file_err:
+                print(f"Failed to update .env: {file_err}")
+                
+    await asyncio.to_thread(update_env)
             
     try:
         # Disconnect temporary client
