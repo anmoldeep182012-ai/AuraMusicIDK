@@ -237,6 +237,8 @@ async def play_logic(client: Client, message: Message, is_video=True):
                 else: raise Exception("No entries found in playlist.")
         else:
             info = await get_stream_info_cached(query, is_video)
+            if not info:
+                raise Exception("video_not_found")
             info['user'] = message.from_user.mention(style=enums.ParseMode.HTML)
             is_playing = len(queues[chat_id]) > 0
             queues[chat_id].append(info)
