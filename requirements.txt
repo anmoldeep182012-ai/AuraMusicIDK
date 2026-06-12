@@ -14,4 +14,4 @@ Pillow
 httpx
 motor
 pymongo
-sclib
+soundcloud-lib
