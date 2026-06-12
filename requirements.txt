@@ -1,9 +1,9 @@
-pyrotgfork
+pyrogram
 tgcrypto
 python-dotenv
 aiohttp
 aiofiles
-py-tgcalls
+py-tgcalls==2.3.0
 yt-dlp[default]
 youtube-search-python
 asyncpg

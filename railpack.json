@@ -5,6 +5,6 @@
     "node": "20"
   },
   "deploy": {
-    "aptPackages": ["ffmpeg"]
+    "aptPackages": ["ffmpeg", "libopus-dev"]
   }
 }

@@ -577,6 +577,20 @@ def get_jiosaavn_stream_info(query: str):
     return None
 
 def get_stream_info(query, is_video=False):
+    # Local File Bypass
+    if os.path.exists(query):
+        title = os.path.basename(query)
+        return {
+            "url": query,
+            "audio_url": None,
+            "title": title,
+            "duration": "00:00",
+            "duration_sec": 0,
+            "thumbnail": None,
+            "is_video": is_video or query.lower().endswith((".mp4", ".mkv")),
+            "yt_url": query
+        }
+
     # Direct Stream Link Bypass (Bypass yt-dlp entirely for raw URLs)
     lower_query = query.lower()
     if query.startswith(("http://", "https://")) and (
@@ -796,7 +810,10 @@ async def get_stream_info_cached(query, is_video=False):
 def create_media_stream(track: dict) -> MediaStream:
     kwargs = {
         "audio_parameters": AudioQuality.MEDIUM,
-        "ffmpeg_parameters": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        "ffmpeg_parameters": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
     }
     if track.get("is_video"):
         kwargs["video_parameters"] = VideoQuality.SD_360p
