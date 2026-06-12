@@ -286,8 +286,13 @@ async def play_logic(client: Client, message: Message, is_video=True):
 
             # Optimization: Force separate streams for high-quality AV sync
             stream = create_media_stream(first)
-            await pytgcalls.play(chat_id, stream)
-            
+
+            try:
+                await pytgcalls.play(chat_id, stream)
+            except Exception as e:
+                # Fallback to older pytgcalls signature if needed or handle connection error
+                raise Exception(f"Failed to play stream: {str(e)}")
+
             buttons = InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {first['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)],
                 [
