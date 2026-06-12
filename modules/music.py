@@ -133,6 +133,41 @@ def urlopen_direct(req, timeout=8, context=None):
         return urllib.request.urlopen(req, timeout=timeout, context=context)
     return urllib.request.urlopen(req, timeout=timeout)
 
+def is_stream_url_alive(url: str) -> bool:
+    if not url:
+        return False
+    if os.path.exists(url):
+        return True
+    import urllib.request
+    import ssl
+    ctx = ssl._create_unverified_context()
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Range": "bytes=0-1024"
+            }
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=3.0) as resp:
+            status = resp.getcode()
+            if status not in (200, 206):
+                return False
+            cl = resp.getheader("Content-Length")
+            if cl is not None:
+                try:
+                    if int(cl) == 0:
+                        return False
+                except ValueError:
+                    pass
+            first_chunk = resp.read(10)
+            if len(first_chunk) == 0:
+                return False
+            return True
+    except Exception as e:
+        print(f"Stream URL health check failed for {url[:50]}: {e}")
+        return False
+
 def is_playlist(url: str) -> bool:
     if "list=" in url or "playlist" in url:
         return True
@@ -658,10 +693,9 @@ def get_stream_info(query, is_video=False):
 
     video_id = get_video_id(query)
     if video_id:
-        # Try alternate APIs (Cobalt / Piped / Invidious) FIRST as main
         try:
             cobalt_res = extract_from_cobalt(video_id, is_video=is_video)
-            if cobalt_res:
+            if cobalt_res and is_stream_url_alive(cobalt_res["url"]):
                 duration_sec = cobalt_res.get("duration_sec", 0)
                 duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
                 return {
@@ -679,7 +713,7 @@ def get_stream_info(query, is_video=False):
 
         try:
             piped_res = extract_from_piped(video_id, is_video=is_video)
-            if piped_res:
+            if piped_res and is_stream_url_alive(piped_res["url"]):
                 duration_sec = piped_res.get("duration_sec", 0)
                 duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
                 return {
@@ -697,7 +731,7 @@ def get_stream_info(query, is_video=False):
 
         try:
             invidious_res = extract_from_invidious(video_id, is_video=is_video)
-            if invidious_res:
+            if invidious_res and is_stream_url_alive(invidious_res["url"]):
                 duration_sec = invidious_res.get("duration_sec", 0)
                 duration_min = f"{duration_sec // 60}:{duration_sec % 60:02d}"
                 return {
@@ -1387,7 +1421,7 @@ async def song_download(client: Client, message: Message):
             fallback_success = False
             if video_id:
                 cobalt_res = extract_from_cobalt(video_id, is_video=False)
-                if cobalt_res and cobalt_res.get("url"):
+                if cobalt_res and cobalt_res.get("url") and is_stream_url_alive(cobalt_res["url"]):
                     try:
                         file_path = f"downloads/{video_id}.mp3"
                         urllib.request.urlretrieve(cobalt_res["url"], file_path)
@@ -1396,16 +1430,16 @@ async def song_download(client: Client, message: Message):
                         pass
                 if not fallback_success:
                     piped_res = extract_from_piped(video_id, is_video=False)
-                if piped_res and piped_res.get("url"):
-                    try:
-                        file_path = f"downloads/{video_id}.mp3"
-                        urllib.request.urlretrieve(piped_res["url"], file_path)
-                        fallback_success = True
-                    except:
-                        pass
+                    if piped_res and piped_res.get("url") and is_stream_url_alive(piped_res["url"]):
+                        try:
+                            file_path = f"downloads/{video_id}.mp3"
+                            urllib.request.urlretrieve(piped_res["url"], file_path)
+                            fallback_success = True
+                        except:
+                            pass
                 if not fallback_success:
                     invidious_res = extract_from_invidious(video_id, is_video=False)
-                    if invidious_res and invidious_res.get("url"):
+                    if invidious_res and invidious_res.get("url") and is_stream_url_alive(invidious_res["url"]):
                         try:
                             file_path = f"downloads/{video_id}.mp3"
                             urllib.request.urlretrieve(invidious_res["url"], file_path)
