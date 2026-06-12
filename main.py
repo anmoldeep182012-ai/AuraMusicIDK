@@ -13,7 +13,7 @@ def patch_httpx():
         if 'proxies' in kwargs:
             proxies = kwargs.pop('proxies')
             if proxies:
-                with httpx.Client(proxies=proxies) as client:
+                with httpx.Client(proxy=proxies) as client:
                     return client.post(*args, **kwargs)
         return orig_post(*args, **kwargs)
 
@@ -21,7 +21,7 @@ def patch_httpx():
         if 'proxies' in kwargs:
             proxies = kwargs.pop('proxies')
             if proxies:
-                with httpx.Client(proxies=proxies) as client:
+                with httpx.Client(proxy=proxies) as client:
                     return client.get(*args, **kwargs)
         return orig_get(*args, **kwargs)
 

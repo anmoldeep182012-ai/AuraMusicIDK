@@ -218,22 +218,88 @@ def get_dynamic_piped_instances():
         print(f"Failed to fetch Piped instances: {e}")
     return []
 
+_invidious_instances_cache = []
+_invidious_instances_cache_time = 0
+
 def get_dynamic_invidious_instances():
+    global _invidious_instances_cache, _invidious_instances_cache_time
+    now = time.time()
+    if _invidious_instances_cache and (now - _invidious_instances_cache_time < 1800):
+        return _invidious_instances_cache
+
+    instances_list = []
     try:
-        url = "https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md"
+        url = "https://api.invidious.io/instances.json"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urlopen_direct(req, timeout=5) as response:
-            content = response.read().decode('utf-8')
-            domains = re.findall(r'\*\s*\[([^\]]+)\]\(https?://[^)]+\)', content)
-            cleaned = []
-            for d in domains:
-                d = d.strip()
-                if d and not d.endswith(".onion") and not d.endswith(".i2p") and not d.endswith(".ygg"):
-                    cleaned.append(f"https://{d}")
-            return cleaned
+        import ssl
+        ctx = ssl._create_unverified_context()
+        with urlopen_direct(req, timeout=5, context=ctx) as r:
+            data = json.loads(r.read().decode('utf-8'))
+            temp_list = []
+            for item in data:
+                domain = item[0]
+                details = item[1]
+                if details.get("type") != "https":
+                    continue
+                
+                monitor = details.get("monitor")
+                last_status = monitor.get("last_status") if monitor else None
+                if last_status != 200:
+                    continue
+                
+                stats = details.get("stats")
+                playback = stats.get("playback", {}) if stats else {}
+                ratio = playback.get("ratio", -1.0) if playback else -1.0
+                
+                uri = details.get("uri")
+                if uri:
+                    temp_list.append((uri, ratio))
+            
+            def sort_key(x):
+                ratio = x[1]
+                if ratio == -1.0:
+                    return 0.1
+                return ratio
+            
+            temp_list.sort(key=sort_key, reverse=True)
+            instances_list = [x[0] for x in temp_list]
     except Exception as e:
-        print(f"Failed to fetch Invidious instances: {e}")
-    return []
+        print(f"Failed to fetch invidious instances from API: {e}")
+        
+    if not instances_list:
+        instances_list = [
+            "https://inv.thepixora.com",
+            "https://inv.nadeko.net",
+            "https://invidious.nerdvpn.de",
+            "https://invidious.tiekoetter.com",
+            "https://invidious.f5.si",
+            "https://yt.chocolatemoo53.com"
+        ]
+    else:
+        for fallback in ["https://inv.thepixora.com"]:
+            if fallback in instances_list:
+                instances_list.remove(fallback)
+            instances_list.insert(0, fallback)
+            
+    _invidious_instances_cache = instances_list
+    _invidious_instances_cache_time = now
+    return instances_list
+
+def proxy_googlevideo_url(url: str) -> str:
+    if not url or "googlevideo.com" not in url:
+        return url
+        
+    instances = get_dynamic_invidious_instances()
+    if not instances:
+        return url
+        
+    import random
+    base_instance = random.choice(instances[:min(3, len(instances))])
+    
+    match = re.search(r'/videoplayback\?.*', url)
+    if match:
+        return f"{base_instance}{match.group(0)}"
+    return url
 
 def search_alt_piped(query):
     piped_instances = get_dynamic_piped_instances()
@@ -398,8 +464,20 @@ def extract_from_invidious(video_id, is_video=False):
                             selected_stream = format_streams[-1]
                             
                 if selected_stream:
+                    stream_url = selected_stream["url"]
+                    if not stream_url.startswith(("http://", "https://")):
+                        if not stream_url.startswith("/"):
+                            stream_url = "/" + stream_url
+                        stream_url = f"{base}{stream_url}"
+                    elif "googlevideo.com" in stream_url:
+                        match = re.search(r'/videoplayback\?.*', stream_url)
+                        if match:
+                            stream_url = f"{base}{match.group(0)}"
+                    elif stream_url.startswith("http://") and base.startswith("https://"):
+                        stream_url = stream_url.replace("http://", "https://", 1)
+                    
                     return {
-                        "url": selected_stream["url"],
+                        "url": stream_url,
                         "title": title,
                         "duration_sec": duration_sec,
                         "thumbnail": thumbnail
@@ -722,9 +800,19 @@ def create_media_stream(track: dict) -> MediaStream:
         kwargs["video_parameters"] = VideoQuality.SD_360p
     else:
         kwargs["video_flags"] = MediaStream.Flags.IGNORE
+        
+    url = track["url"]
+    audio_path = track.get("audio_url")
+    
+    # Proxy direct googlevideo links through a working Invidious instance
+    if url and "googlevideo.com" in url:
+        url = proxy_googlevideo_url(url)
+    if audio_path and "googlevideo.com" in audio_path:
+        audio_path = proxy_googlevideo_url(audio_path)
+        
     return MediaStream(
-        track["url"],
-        audio_path=track.get("audio_url"),
+        url,
+        audio_path=audio_path,
         **kwargs
     )
 
