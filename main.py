@@ -36,7 +36,7 @@ from pytgcalls import PyTgCalls
 from config import Config
 from database.db import db
 from helpers.utils import convert_json_to_netscape, sync_served_chats_from_userbot
-from helpers.styling import small_caps
+from helpers.styling import small_caps, fraktur
 import modules.music as music
 from helpers.void_state import VoidState, trigger_void_event
 
@@ -118,10 +118,6 @@ async def init():
             logger.warning("FFMPEG directory not found!")
     else:
         logger.info("Running on Linux/Unix, using system FFmpeg.")
-
-    # Check for Session String
-    if not Config.SESSION_STRING or Config.SESSION_STRING == "":
-        await generate_session()
 
     # Initialize Database
     await db.init()
