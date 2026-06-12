@@ -122,14 +122,6 @@ async def init():
     # Initialize Database
     await db.init()
     
-    # Load persistent queues into memory for compatibility
-    try:
-        queues_map = await db.load_all_queues()
-        music.queues.update(queues_map)
-        logger.info(f"Loaded {len(queues_map)} persistent queues from database.")
-    except Exception as q_err:
-        logger.error(f"Failed to load persistent queues: {q_err}")
-    
     # Save Cookies from Env Variables if provided
     youtube_cookie_env = os.getenv("YOUTUBE_COOKIE")
     if youtube_cookie_env:

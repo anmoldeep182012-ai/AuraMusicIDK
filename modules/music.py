@@ -702,9 +702,37 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
             queues[chat_id].pop(0)
             await db.remove_first_track(chat_id)
             if queues[chat_id]:
-                next_track = queues[chat_id][0]
-                await pytgcalls.play(chat_id, create_media_stream(next_track))
-                await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
+                next_t = queues[chat_id][0]
+                await pytgcalls.play(chat_id, create_media_stream(next_t))
+                
+                # Send the "Now Playing" panel
+                buttons = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {next_t['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)],
+                    [
+                        InlineKeyboardButton(small_caps("ᴘʀᴇᴠ"), callback_data="music_prev", style=enums.ButtonStyle.DEFAULT),
+                        InlineKeyboardButton(small_caps("ᴘᴀᴜꜱᴇ"), callback_data="music_pause", style=enums.ButtonStyle.PRIMARY),
+                        InlineKeyboardButton(small_caps("ꜱᴋɪᴘ"), callback_data="music_skip", style=enums.ButtonStyle.DEFAULT)
+                    ],
+                    [
+                        InlineKeyboardButton(small_caps("ᴛᴜɴᴇꜱ"), url="https://t.me/AuralyxTunes", style=enums.ButtonStyle.PRIMARY),
+                        InlineKeyboardButton(small_caps("ʜᴏᴍᴇ"), url="https://t.me/AuralyxHome", style=enums.ButtonStyle.PRIMARY)
+                    ],
+                    [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
+                ])
+                header = fraktur("Now Playing")
+                panel_text = f"<blockquote>\n{header} ❞\n</blockquote>\n" \
+                              f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {next_t['title'][:30]} ❞\n" \
+                              f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {next_t['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
+                              f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {next_t['user']}\n</blockquote>\n" \
+                              f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
+                
+                if next_t.get('thumbnail'):
+                    try:
+                        await client.send_photo(chat_id=chat_id, photo=next_t['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                    except Exception:
+                        await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+                else:
+                    await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
             else:
                 await pytgcalls.leave_call(chat_id)
                 queues.pop(chat_id, None)
@@ -735,7 +763,35 @@ async def skip_music(client: Client, message: Message):
         if queues[chat_id]: 
             next_t = queues[chat_id][0]
             await pytgcalls.play(chat_id, create_media_stream(next_t))
-            await client.send_message(chat_id, f"<blockquote>{fraktur('Stream Skipped')} ❞</blockquote>")
+            
+            # Send the "Now Playing" panel
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {next_t['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)],
+                [
+                    InlineKeyboardButton(small_caps("ᴘʀᴇᴠ"), callback_data="music_prev", style=enums.ButtonStyle.DEFAULT),
+                    InlineKeyboardButton(small_caps("ᴘᴀᴜꜱᴇ"), callback_data="music_pause", style=enums.ButtonStyle.PRIMARY),
+                    InlineKeyboardButton(small_caps("ꜱᴋɪᴘ"), callback_data="music_skip", style=enums.ButtonStyle.DEFAULT)
+                ],
+                [
+                    InlineKeyboardButton(small_caps("ᴛᴜɴᴇꜱ"), url="https://t.me/AuralyxTunes", style=enums.ButtonStyle.PRIMARY),
+                    InlineKeyboardButton(small_caps("ʜᴏᴍᴇ"), url="https://t.me/AuralyxHome", style=enums.ButtonStyle.PRIMARY)
+                ],
+                [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
+            ])
+            header = fraktur("Now Playing")
+            panel_text = f"<blockquote>\n{header} ❞\n</blockquote>\n" \
+                          f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {next_t['title'][:30]} ❞\n" \
+                          f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {next_t['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
+                          f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {next_t['user']}\n</blockquote>\n" \
+                          f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
+            
+            if next_t.get('thumbnail'):
+                try:
+                    await client.send_photo(chat_id=chat_id, photo=next_t['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                except Exception:
+                    await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+            else:
+                await client.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
         else:
             await pytgcalls.leave_call(chat_id)
             queues.pop(chat_id, None)
@@ -774,6 +830,37 @@ def init_handlers(pytg: PyTgCalls):
                 next_t = queues[chat_id][0]
                 try:
                     await client.play(chat_id, create_media_stream(next_t))
+                    
+                    # Send the "Now Playing" panel
+                    if bot:
+                        buttons = InlineKeyboardMarkup([
+                            [InlineKeyboardButton(f"00:00 ━━━━━━━━⬤────── {next_t['duration']}", callback_data="timer", style=enums.ButtonStyle.PRIMARY)],
+                            [
+                                InlineKeyboardButton(small_caps("ᴘʀᴇᴠ"), callback_data="music_prev", style=enums.ButtonStyle.DEFAULT),
+                                InlineKeyboardButton(small_caps("ᴘᴀᴜꜱᴇ"), callback_data="music_pause", style=enums.ButtonStyle.PRIMARY),
+                                InlineKeyboardButton(small_caps("ꜱᴋɪᴘ"), callback_data="music_skip", style=enums.ButtonStyle.DEFAULT)
+                            ],
+                            [
+                                InlineKeyboardButton(small_caps("ᴛᴜɴᴇꜱ"), url="https://t.me/AuralyxTunes", style=enums.ButtonStyle.PRIMARY),
+                                InlineKeyboardButton(small_caps("ʜᴏᴍᴇ"), url="https://t.me/AuralyxHome", style=enums.ButtonStyle.PRIMARY)
+                            ],
+                            [InlineKeyboardButton(small_caps("ᴄʟᴏꜱᴇ ᴘᴀɴᴇʟ"), callback_data="close_panel", style=enums.ButtonStyle.DANGER)]
+                        ])
+                        header = fraktur("Now Playing")
+                        panel_text = f"<blockquote>\n{header} ❞\n</blockquote>\n" \
+                                      f"<blockquote>\n{small_caps('ᴛɪᴛʟᴇ')}: {next_t['title'][:30]} ❞\n" \
+                                      f"{small_caps('ᴅᴜʀᴀᴛɪᴏɴ')}: {next_t['duration']} {small_caps('ᴍɪɴᴜᴛᴇꜱ')}\n" \
+                                      f"{small_caps('ʀᴇQᴜᴇꜱᴛᴇᴅ')}: {next_t['user']}\n</blockquote>\n" \
+                                      f"<blockquote>\n{small_caps('ᴘᴏᴡᴇʀᴇᴅ')}: <a href=\"https://t.me/Sexuatic\">ꜱᴇxᴜᴀᴛɪᴄ</a> ❞\n</blockquote>"
+                        
+                        if next_t.get('thumbnail'):
+                            try:
+                                await bot.send_photo(chat_id=chat_id, photo=next_t['thumbnail'], caption=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML)
+                            except Exception:
+                                await bot.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+                        else:
+                            await bot.send_message(chat_id, text=panel_text, reply_markup=buttons, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
+
                 except Exception as play_err:
                     print(f"Auto-play failed for track '{next_t.get('title', 'Unknown')}': {play_err}")
                     
