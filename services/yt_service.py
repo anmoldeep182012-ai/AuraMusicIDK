@@ -17,46 +17,6 @@ from config import Config
 executor = ThreadPoolExecutor(max_workers=10)
 sc_api = SoundcloudAPI()
 
-# Proxy Circuit Breaker state
-proxy_failures = 0
-last_proxy_failure = 0
-PROXY_COOLDOWN = 300  # 5 minutes
-
-def get_formatted_proxy():
-    proxy = os.getenv("PROXY")
-    if not proxy:
-        proxy_file = "PROXY/Webshare 10 proxies.txt"
-        if os.path.exists(proxy_file):
-            try:
-                with open(proxy_file, "r") as f:
-                    lines = [line.strip() for line in f if line.strip()]
-                    if lines:
-                        proxy = random.choice(lines)
-            except Exception as e:
-                print(f"Failed to read proxy file: {e}")
-    if not proxy:
-        return None
-    proxy = proxy.strip()
-    if not (proxy.startswith("http://") or proxy.startswith("https://") or proxy.startswith("socks5://") or proxy.startswith("socks4://")):
-        parts = proxy.split(":")
-        if len(parts) == 4:
-            return f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
-    return proxy
-
-def urlopen_with_proxy(req, timeout=8, context=None):
-    proxy_url = get_formatted_proxy()
-    if proxy_url:
-        try:
-            handlers = [urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})]
-            if context is not None:
-                handlers.append(urllib.request.HTTPSHandler(context=context))
-            opener = urllib.request.build_opener(*handlers)
-            return opener.open(req, timeout=timeout)
-        except: pass
-    if context is not None:
-        return urllib.request.urlopen(req, timeout=timeout, context=context)
-    return urllib.request.urlopen(req, timeout=timeout)
-
 def is_stream_url_alive(url: str) -> bool:
     if not url: return False
     if os.path.exists(url): return True
@@ -92,12 +52,9 @@ def extract_with_pytubefix(video_id, is_video=False):
     return None
 
 def proxy_googlevideo_url(url: str) -> str:
-    if not url or "googlevideo.com" not in url: return url
-    instances = ["https://inv.thepixora.com", "https://inv.nadeko.net", "https://invidious.nerdvpn.de"]
-    base_instance = random.choice(instances)
-    match = re.search(r'/videoplayback\?.*', url)
-    return f"{base_instance}{match.group(0)}" if match else url
-
+    # Not actually a true proxy, just redirecting through a front-end instance for UI playback if needed. 
+    # But since user wants no proxy, we return original url.
+    return url
 
 def extract_from_piped(video_id, is_video=False):
     instances = ["https://api.piped.private.coffee", "https://pipedapi.kavin.rocks", "https://pipedapi.leptons.xyz"]
@@ -105,7 +62,7 @@ def extract_from_piped(video_id, is_video=False):
         try:
             url = f"{base}/streams/{video_id}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_with_proxy(req, timeout=4) as response:
+            with urllib.request.urlopen(req, timeout=4) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 streams = data.get("audioStreams", []) if not is_video else data.get("videoStreams", [])
                 if streams:
@@ -119,7 +76,7 @@ def extract_from_invidious(video_id, is_video=False):
         try:
             url = f"{base}/api/v1/videos/{video_id}?local=true"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen_with_proxy(req, timeout=4) as response:
+            with urllib.request.urlopen(req, timeout=4) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 adaptive = data.get("adaptiveFormats", [])
                 streams = [a for a in adaptive if "audio" in a.get("type", "").lower()] if not is_video else data.get("formatStreams", [])
@@ -134,7 +91,7 @@ def extract_from_cobalt(video_id, is_video=False):
         try:
             payload = {"url": f"https://www.youtube.com/watch?v={video_id}", "videoQuality": "720", "downloadMode": "audio" if not is_video else "auto"}
             req = urllib.request.Request(base, data=json.dumps(payload).encode("utf-8"), headers={"Accept": "application/json", "Content-Type": "application/json"}, method="POST")
-            with urlopen_with_proxy(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:
                 data = json.loads(response.read().decode("utf-8"))
                 if data.get("url"): return {"url": data["url"], "title": "Cobalt Stream", "duration_sec": 0, "thumbnail": None}
         except: pass
@@ -191,8 +148,6 @@ async def get_stream_info(query, is_video=False):
             return {**res, "duration": f"{res.get('duration_sec', 0) // 60}:{res.get('duration_sec', 0) % 60:02d}", "is_video": is_video, "yt_url": f"https://www.youtube.com/watch?v={video_id}"}
 
     ydl_opts = {'format': "bestaudio/best" if not is_video else "best", 'quiet': True, 'no_warnings': True, 'noplaylist': True, 'cookiefile': "COOKIE/Youtube_Netscape.txt"}
-    proxy = get_formatted_proxy()
-    if proxy: ydl_opts['proxy'] = proxy
 
     try:
         with YoutubeDL(ydl_opts) as ydl:

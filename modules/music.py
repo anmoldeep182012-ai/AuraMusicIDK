@@ -14,7 +14,7 @@ from database.db import db
 from helpers.filters import admin, check_admin
 from helpers.utils import animator
 from services.yt_service import (
-    get_stream_info, is_playlist, get_formatted_proxy, 
+    get_stream_info, is_playlist,
     get_video_id, YoutubeDL, extract_from_cobalt, 
     extract_from_piped, extract_from_invidious, is_stream_url_alive,
     proxy_googlevideo_url
