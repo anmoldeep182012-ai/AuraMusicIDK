@@ -922,10 +922,20 @@ async def play_logic(client: Client, message: Message, is_video=True):
 
     try:
         try:
-            await userbot.get_chat(chat_id)
+            user_me = await userbot.get_me()
+            member = await userbot.get_chat_member(chat_id, user_me.id)
+            if member.status in [enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.LEFT]:
+                raise Exception("userbot_not_in_chat")
         except Exception:
-            invitelink = await client.export_chat_invite_link(chat_id)
-            await userbot.join_chat(invitelink)
+            try:
+                invitelink = await client.export_chat_invite_link(chat_id)
+                await userbot.join_chat(invitelink)
+            except Exception as join_err:
+                chat = await client.get_chat(chat_id)
+                if chat.username:
+                    await userbot.join_chat(chat.username)
+                else:
+                    raise join_err
 
         if chat_id not in queues: queues[chat_id] = []
         if chat_id in auto_leave_tasks:

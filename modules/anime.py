@@ -173,15 +173,25 @@ async def anime_play_handler(client: Client, message: Message):
 
     # Ensure Userbot is in the chat
     try:
-        await music.userbot.get_chat(chat_id)
+        user_me = await music.userbot.get_me()
+        member = await music.userbot.get_chat_member(chat_id, user_me.id)
+        if member.status in [enums.ChatMemberStatus.BANNED, enums.ChatMemberStatus.LEFT]:
+            raise Exception("userbot_not_in_chat")
     except Exception:
         try:
             invitelink = await client.export_chat_invite_link(chat_id)
             await music.userbot.join_chat(invitelink)
         except Exception as join_err:
-            header = fraktur("Userbot Joining Failed")
-            body = "ᴜѕᴇʀʙᴏᴛ ᴄᴏᴜʟᴅ ɴᴏᴛ ᴊᴏɪɴ ᴛʜᴇ ᴄʜᴀᴛ. ᴍᴀᴋᴇ ѕᴜʀᴇ ᴛʜᴇ ʙᴏᴛ ʜᴀѕ ɪɴᴠɪᴛᴇ ᴘᴇʀᴍɪѕѕɪᴏɴѕ."
-            return await status_msg.edit_text(f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+            try:
+                chat = await client.get_chat(chat_id)
+                if chat.username:
+                    await music.userbot.join_chat(chat.username)
+                else:
+                    raise join_err
+            except Exception:
+                header = fraktur("Userbot Joining Failed")
+                body = "ᴜѕᴇʀʙᴏᴛ ᴄᴏᴜʟᴅ ɴᴏᴛ ᴊᴏɪɴ ᴛʜᴇ ᴄʜᴀᴛ. ᴍᴀᴋᴇ ѕᴜʀᴇ ᴛʜᴇ ʙᴏᴛ ʜᴀѕ ɪɴᴠɪᴛᴇ ᴘᴇʀᴍɪѕѕɪᴏɴѕ."
+                return await status_msg.edit_text(f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
 
     # Attempt to stream using PyTgCalls
     await status_msg.edit_text(f"<blockquote>{small_caps('Joining Voice Chat...')}</blockquote>")
