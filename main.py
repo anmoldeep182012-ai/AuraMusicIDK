@@ -109,12 +109,15 @@ async def generate_session():
 
 async def init():
     # Add FFMPEG to PATH (Prepend to bypass any slow/broken system FFMPEG binaries)
-    ffmpeg_path = os.path.abspath("FFMPEG")
-    if os.path.exists(ffmpeg_path):
-        os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ["PATH"]
-        logger.info(f"Prepended FFMPEG to PATH: {ffmpeg_path}")
+    if os.name == "nt":
+        ffmpeg_path = os.path.abspath("FFMPEG")
+        if os.path.exists(ffmpeg_path):
+            os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ["PATH"]
+            logger.info(f"Prepended FFMPEG to PATH: {ffmpeg_path}")
+        else:
+            logger.warning("FFMPEG directory not found!")
     else:
-        logger.warning("FFMPEG directory not found!")
+        logger.info("Running on Linux/Unix, using system FFmpeg.")
 
     # Check for Session String
     if not Config.SESSION_STRING or Config.SESSION_STRING == "":
