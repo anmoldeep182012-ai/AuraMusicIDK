@@ -11,7 +11,7 @@ async def is_sudo(_, __, message):
     if message.from_user.id == OWNER_ID:
         return True
     sudoers = await db.get_sudoers()
-    return message.from_user.id in sudoers
+    return message.from_user.id in sudoers or str(message.from_user.id) in sudoers
 
 sudoers = filters.create(is_sudo)
 
@@ -27,7 +27,7 @@ async def is_admin(_, __, message):
         return True
     
     sudoers_list = await db.get_sudoers()
-    if user_id in sudoers_list:
+    if user_id in sudoers_list or str(user_id) in sudoers_list:
         # Determine if it's a control command or a moderation command
         cmd = None
         if message.text and message.text.startswith("/"):
@@ -66,7 +66,7 @@ async def check_admin(chat_id: int, user_id: int, client: Client = None, perm: s
         return True
     
     sudoers_list = await db.get_sudoers()
-    if user_id in sudoers_list:
+    if user_id in sudoers_list or str(user_id) in sudoers_list:
         if await db.check_sudo_perm(user_id, perm):
             return True
         

@@ -109,7 +109,12 @@ class Database:
             self._served_users = set(doc["_id"] for doc in users)
             
             sudos = await self.c_sudoers.find({}).to_list(length=None)
-            self._sudoers = set(doc["_id"] for doc in sudos)
+            self._sudoers = set()
+            for doc in sudos:
+                try:
+                    self._sudoers.add(int(doc["_id"]))
+                except (ValueError, TypeError):
+                    self._sudoers.add(doc["_id"])
             
             settings = await self.c_settings.find({}).to_list(length=None)
             self._settings = {doc["_id"]: doc["value"] for doc in settings}
@@ -121,7 +126,12 @@ class Database:
             self._served_users = set(row[0] for row in users)
             
             sudos = await self._fetch("SELECT user_id FROM sudoers")
-            self._sudoers = set(row[0] for row in sudos)
+            self._sudoers = set()
+            for row in sudos:
+                try:
+                    self._sudoers.add(int(row[0]))
+                except (ValueError, TypeError):
+                    self._sudoers.add(row[0])
             
             settings = await self._fetch("SELECT key, value FROM settings")
             self._settings = {row[0]: row[1] for row in settings}
