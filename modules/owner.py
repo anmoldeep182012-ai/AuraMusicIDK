@@ -79,7 +79,7 @@ async def del_sudo_handler(client: Client, message: Message):
         header = fraktur("Sudo Error")
         await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps(str(e))}</blockquote>")
 
-@Client.on_message(filters.command("sudolist") & owner_only)
+@Client.on_message(filters.command("sudolist") & (owner_only | sudoers))
 async def sudo_list_handler(client: Client, message: Message):
     try:
         sudoers = await db.get_sudoers()
@@ -87,6 +87,10 @@ async def sudo_list_handler(client: Client, message: Message):
             return await message.reply_text(small_caps("ɴᴏ ꜱᴜᴅᴏ ᴜꜱᴇʀꜱ ꜰᴏᴜɴᴅ."))
         
         status_msg = await message.reply_text(small_caps("ꜰᴇᴛᴄʜɪɴɢ ꜱᴜᴅᴏᴇʀꜱ ᴅᴇᴛᴀɪʟꜱ..."))
+        
+        sender_id = message.from_user.id if message.from_user else None
+        from config import Config
+        is_owner = (sender_id == Config.OWNER_ID)
         
         body = ""
         keyboard_buttons = []
@@ -118,12 +122,13 @@ async def sudo_list_handler(client: Client, message: Message):
             else:
                 body += f"{i}. <code>{user_id}</code> ({small_caps('ᴜɴᴀʙʟᴇ ᴛᴏ ʀᴇꜱᴏʟᴠᴇ')})\n\n"
             
-            keyboard_buttons.append([
-                InlineKeyboardButton(f"ᴍᴀɴᴀɢᴇ: {name[:20]}", callback_data=f"manage_sudo_{user_id}")
-            ])
+            if is_owner:
+                keyboard_buttons.append([
+                    InlineKeyboardButton(f"ᴍᴀɴᴀɢᴇ: {name[:20]}", callback_data=f"manage_sudo_{user_id}")
+                ])
         
         header = fraktur("Sudo Users")
-        reply_markup = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
+        reply_markup = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons and is_owner else None
         await status_msg.delete()
         await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
                                  f"<blockquote>{body.strip()}</blockquote>",
