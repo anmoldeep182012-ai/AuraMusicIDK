@@ -420,6 +420,16 @@ class Database:
     async def get_sudoers(self) -> list[int]:
         return list(self._sudoers)
 
+    async def check_sudo_perm(self, user_id: int, perm: str) -> bool:
+        if user_id == Config.OWNER_ID:
+            return True
+        if user_id not in self._sudoers:
+            return False
+        # Check permission toggle, defaulting to "on"
+        val = await self.get_setting(f"sudo_perm_{user_id}_{perm}", "on")
+        return val == "on"
+
+
     # Warning Management
     async def get_warns(self, user_id: int, chat_id: int) -> int:
         if self.is_mongo:

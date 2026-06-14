@@ -7,8 +7,8 @@ import tempfile
 import json
 import time
 from pyrogram import Client, filters, enums, raw
-from pyrogram.types import Message
-from helpers.filters import owner_only
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from helpers.filters import owner_only, sudoers
 from helpers.styling import small_caps, fraktur
 from database.db import db
 import modules.music as music
@@ -84,11 +84,12 @@ async def sudo_list_handler(client: Client, message: Message):
     try:
         sudoers = await db.get_sudoers()
         if not sudoers:
-            return await message.reply_text(small_caps("ɴᴏ ꜱᴜᴅᴏ ᴜꜱᴇʀ備 ꜰᴏᴜɴᴅ."))
+            return await message.reply_text(small_caps("ɴᴏ ꜱᴜᴅᴏ ᴜꜱᴇʀꜱ ꜰᴏᴜɴᴅ."))
         
         status_msg = await message.reply_text(small_caps("ꜰᴇᴛᴄʜɪɴɢ ꜱᴜᴅᴏᴇʀꜱ ᴅᴇᴛᴀɪʟꜱ..."))
         
         body = ""
+        keyboard_buttons = []
         for i, user_id in enumerate(sudoers, 1):
             user = None
             # Try to fetch using bot client
@@ -106,6 +107,7 @@ async def sudo_list_handler(client: Client, message: Message):
                 except Exception:
                     pass
             
+            name = str(user_id)
             if user:
                 name = f"{user.first_name} {user.last_name or ''}".strip()
                 username = f"@{user.username}" if user.username else "N/A"
@@ -115,18 +117,30 @@ async def sudo_list_handler(client: Client, message: Message):
                         f"   » {small_caps('ᴘʜᴏɴᴇ')}: <code>{phone}</code>\n\n"
             else:
                 body += f"{i}. <code>{user_id}</code> ({small_caps('ᴜɴᴀʙʟᴇ ᴛᴏ ʀᴇꜱᴏʟᴠᴇ')})\n\n"
+            
+            keyboard_buttons.append([
+                InlineKeyboardButton(f"ᴍᴀɴᴀɢᴇ: {name[:20]}", callback_data=f"manage_sudo_{user_id}")
+            ])
         
         header = fraktur("Sudo Users")
+        reply_markup = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
         await status_msg.delete()
         await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
-                                 f"<blockquote>{body.strip()}</blockquote>")
+                                 f"<blockquote>{body.strip()}</blockquote>",
+                                 reply_markup=reply_markup)
     except Exception as e:
         header = fraktur("Sudo List Error")
         await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps(str(e))}</blockquote>")
 
 
-@Client.on_message(filters.command("broadcast") & owner_only)
+@Client.on_message(filters.command("broadcast") & (owner_only | sudoers))
 async def broadcast_handler(client: Client, message: Message):
+    user_id = message.from_user.id if message.from_user else None
+    from config import Config
+    if user_id != Config.OWNER_ID:
+        if not await db.check_sudo_perm(user_id, "broadcast"):
+            header = fraktur("Access Denied")
+            return await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps('ʏᴏᴜ ᴅᴏ ɴᴏᴛ ʜᴀᴠᴇ ᴛʜᴇ ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ ᴘᴇʀᴍɪꜱꜱɪᴏɴ.')}</blockquote>")
     if not message.reply_to_message and len(message.command) < 2:
         header = fraktur("Usage Error")
         return await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
@@ -223,8 +237,14 @@ async def dbsync_handler(client: Client, message: Message):
             f"<code>{str(e)}</code></blockquote>"
         )
 
-@Client.on_message(filters.command("restart") & owner_only)
+@Client.on_message(filters.command("restart") & (owner_only | sudoers))
 async def restart_handler(client: Client, message: Message):
+    user_id = message.from_user.id if message.from_user else None
+    from config import Config
+    if user_id != Config.OWNER_ID:
+        if not await db.check_sudo_perm(user_id, "system"):
+            header = fraktur("Access Denied")
+            return await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps('ʏᴏᴜ ᴅᴏ ɴᴏᴛ ʜᴀᴠᴇ ᴛʜᴇ ꜱʏꜱᴛᴇᴍ ᴄᴏɴᴛʀᴏʟ ᴘᴇʀᴍɪꜱꜱɪᴏɴ.')}</blockquote>")
     await message.reply_text(small_caps("ʀᴇꜱᴛᴀʀᴛɪɴɢ ʙᴏᴛ..."))
     os.execv(sys.executable, ['python'] + sys.argv)
 
@@ -979,4 +999,172 @@ async def owner_help_handler(client: Client, message: Message):
     )
     await message.reply_text(f"<blockquote>{header} ❞</blockquote>\n" \
                              f"<blockquote>{body}</blockquote>")
+
+
+# Sudo Permissions Callback Panel
+@Client.on_callback_query(filters.regex(r"^manage_sudo_(\d+)$") & owner_only)
+async def manage_sudo_callback(client: Client, callback_query: CallbackQuery):
+    user_id = int(callback_query.data.split("_")[2])
+    
+    # Get user name
+    name = str(user_id)
+    try:
+        user = await client.get_users(user_id)
+        name = f"{user.first_name} {user.last_name or ''}".strip()
+    except Exception:
+        pass
+
+    # Build permissions status
+    perms = {
+        "play": "ᴘʟᴀʏ ᴍᴜꜱɪᴄ",
+        "control": "ᴄᴏɴᴛʀᴏʟ ꜱᴛʀᴇᴀᴍ",
+        "moderation": "ɢʀᴏᴜᴘ ᴍᴏᴅᴇʀᴀᴛɪᴏɴ",
+        "bypass_maintenance": "ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ ʙʏᴘᴀꜱꜱ",
+        "bot_config": "ʙᴏᴛ ᴄᴏɴꜰɪɢ",
+        "system": "ꜱʏꜱᴛᴇᴍ ᴄᴏɴᴛʀᴏʟ",
+        "broadcast": "ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ"
+    }
+
+    body = f"» {small_caps('ᴜꜱᴇʀ')}: <b>{name}</b> (<code>{user_id}</code>)\n"
+    body += f"» {small_caps('ʀᴏʟᴇ')}: {small_caps('ꜱᴜᴅᴏ ᴏᴘᴇʀᴀᴛᴏʀ')}\n\n"
+    body += f"» {small_caps('ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ ꜱᴛᴀᴛᴜꜱ')}:\n"
+
+    keyboard_buttons = []
+    for key, label in perms.items():
+        is_on = await db.check_sudo_perm(user_id, key)
+        status_text = "ᴏɴ" if is_on else "ᴏꜰꜰ"
+        status_indicator = "🔵" if is_on else "🔴"
+        
+        body += f"   • {label}: {status_text.upper()}\n"
+        
+        # Toggle button
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                f"{label} · {status_indicator}",
+                callback_data=f"toggle_sudo_{user_id}_{key}"
+            )
+        ])
+    
+    keyboard_buttons.append([
+        InlineKeyboardButton(small_caps("ʙᴀᴄᴋ ᴛᴏ ʟɪꜱᴛ"), callback_data="sudolist_back")
+    ])
+    
+    header = fraktur("Sudo Permissions")
+    await callback_query.edit_message_text(
+        f"<blockquote>{header} ❞</blockquote>\n" \
+        f"<blockquote>{body}</blockquote>",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons)
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^toggle_sudo_(\d+)_(.+)$") & owner_only)
+async def toggle_sudo_callback(client: Client, callback_query: CallbackQuery):
+    user_id = int(callback_query.matches[0].group(1))
+    perm = callback_query.matches[0].group(2)
+    
+    # Toggle setting
+    current = await db.check_sudo_perm(user_id, perm)
+    new_val = "off" if current else "on"
+    await db.set_setting(f"sudo_perm_{user_id}_{perm}", new_val)
+    
+    # Answer query
+    status_msg = "ᴇɴᴀʙʟᴇᴅ" if new_val == "on" else "ᴅɪꜱᴀʙʟᴇᴅ"
+    await callback_query.answer(small_caps(f"ᴘᴇʀᴍɪꜱꜱɪᴏɴ {status_msg}"), show_alert=False)
+    
+    # Refresh panel (re-run manage_sudo logic)
+    name = str(user_id)
+    try:
+        user = await client.get_users(user_id)
+        name = f"{user.first_name} {user.last_name or ''}".strip()
+    except Exception:
+        pass
+
+    perms = {
+        "play": "ᴘʟᴀʏ ᴍᴜꜱɪᴄ",
+        "control": "ᴄᴏɴᴛʀᴏʟ ꜱᴛʀᴇᴀᴍ",
+        "moderation": "ɢʀᴏᴜᴘ ᴍᴏᴅᴇʀᴀᴛɪᴏɴ",
+        "bypass_maintenance": "ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ ʙʏᴘᴀꜱꜱ",
+        "bot_config": "ʙᴏᴛ ᴄᴏɴꜰɪɢ",
+        "system": "ꜱʏꜱᴛᴇᴍ ᴄᴏɴᴛʀᴏʟ",
+        "broadcast": "ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ"
+    }
+
+    body = f"» {small_caps('ᴜꜱᴇʀ')}: <b>{name}</b> (<code>{user_id}</code>)\n"
+    body += f"» {small_caps('ʀᴏʟᴇ')}: {small_caps('ꜱᴜᴅᴏ ᴏᴘᴇʀᴀᴛᴏʀ')}\n\n"
+    body += f"» {small_caps('ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ ꜱᴛᴀᴛᴜꜱ')}:\n"
+
+    keyboard_buttons = []
+    for key, label in perms.items():
+        is_on = await db.check_sudo_perm(user_id, key)
+        status_text = "ᴏɴ" if is_on else "ᴏꜰꜰ"
+        status_indicator = "🔵" if is_on else "🔴"
+        
+        body += f"   • {label}: {status_text.upper()}\n"
+        
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                f"{label} · {status_indicator}",
+                callback_data=f"toggle_sudo_{user_id}_{key}"
+            )
+        ])
+    
+    keyboard_buttons.append([
+        InlineKeyboardButton(small_caps("ʙᴀᴄᴋ ᴛᴏ ʟɪꜱᴛ"), callback_data="sudolist_back")
+    ])
+    
+    header = fraktur("Sudo Permissions")
+    await callback_query.edit_message_text(
+        f"<blockquote>{header} ❞</blockquote>\n" \
+        f"<blockquote>{body}</blockquote>",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons)
+    )
+
+
+@Client.on_callback_query(filters.regex("^sudolist_back$") & owner_only)
+async def sudolist_back_callback(client: Client, callback_query: CallbackQuery):
+    sudoers = await db.get_sudoers()
+    if not sudoers:
+        await callback_query.edit_message_text(small_caps("ɴᴏ ꜱᴜᴅᴏ ᴜꜱᴇʀꜱ ꜰᴏᴜɴᴅ."))
+        return await callback_query.answer()
+        
+    body = ""
+    keyboard_buttons = []
+    for i, user_id in enumerate(sudoers, 1):
+        user = None
+        try:
+            user = await client.get_users(user_id)
+        except Exception:
+            pass
+            
+        if music.userbot and (not user or not getattr(user, "phone_number", None)):
+            try:
+                ub_user = await music.userbot.get_users(user_id)
+                if ub_user:
+                    user = ub_user
+            except Exception:
+                pass
+        
+        name = str(user_id)
+        if user:
+            name = f"{user.first_name} {user.last_name or ''}".strip()
+            username = f"@{user.username}" if user.username else "N/A"
+            phone = f"+{user.phone_number}" if getattr(user, "phone_number", None) else "Hidden"
+            body += f"{i}. <b>{name}</b> ({username})\n" \
+                    f"   » {small_caps('ɪᴅ')}: <code>{user.id}</code>\n" \
+                    f"   » {small_caps('ᴘʜᴏɴᴇ')}: <code>{phone}</code>\n\n"
+        else:
+            body += f"{i}. <code>{user_id}</code> ({small_caps('ᴜɴᴀʙʟᴇ ᴛᴏ ʀᴇꜱᴏʟᴠᴇ')})\n\n"
+        
+        keyboard_buttons.append([
+            InlineKeyboardButton(f"ᴍᴀɴᴀɢᴇ: {name[:20]}", callback_data=f"manage_sudo_{user_id}")
+        ])
+    
+    header = fraktur("Sudo Users")
+    reply_markup = InlineKeyboardMarkup(keyboard_buttons) if keyboard_buttons else None
+    await callback_query.edit_message_text(f"<blockquote>{header} ❞</blockquote>\n" \
+                                         f"<blockquote>{body.strip()}</blockquote>",
+                                         reply_markup=reply_markup)
+    await callback_query.answer()
+
 

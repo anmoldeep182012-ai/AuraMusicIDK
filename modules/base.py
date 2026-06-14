@@ -120,6 +120,12 @@ async def start_panel_callback(client: Client, callback_query: CallbackQuery):
 
 @Client.on_message(filters.command("setstart") & sudoers)
 async def set_start_handler(client: Client, message: Message):
+    user_id = message.from_user.id if message.from_user else None
+    if user_id:
+        if not await db.check_sudo_perm(user_id, "bot_config"):
+            header = fraktur("Access Denied")
+            return await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps('ʏᴏᴜ ᴅᴏ ɴᴏᴛ ʜᴀᴠᴇ ᴛʜᴇ ʙᴏᴛ ᴄᴏɴꜰɪɢ ᴘᴇʀᴍɪꜱꜱɪᴏɴ.')}</blockquote>")
+            
     if not message.reply_to_message:
         return await message.reply_text(small_caps("ᴘʟᴇᴀꜱᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇꜱꜱᴀɢᴇ ᴛᴏ ꜱᴇᴛ ɪᴛ ᴀꜱ ꜱᴛᴀʀᴛ ᴘᴀɴᴇʟ ᴛᴇxᴛ."))
 
@@ -152,6 +158,12 @@ async def id_handler(client: Client, message: Message):
 
 @Client.on_message(filters.command("maintenance") & sudoers)
 async def maintenance_command_handler(client: Client, message: Message):
+    user_id = message.from_user.id if message.from_user else None
+    if user_id:
+        if not await db.check_sudo_perm(user_id, "system"):
+            header = fraktur("Access Denied")
+            return await message.reply_text(f"<blockquote>{header} ❞\n\n{small_caps('ʏᴏᴜ ᴅᴏ ɴᴏᴛ ʜᴀᴠᴇ ᴛʜᴇ ꜱʏꜱᴛᴇᴍ ᴄᴏɴᴛʀᴏʟ ᴘᴇʀᴍɪꜱꜱɪᴏɴ.')}</blockquote>")
+            
     if len(message.command) < 2: return await message.reply_text(small_caps("ᴜꜱᴀɢᴇ: /ᴍᴀɪɴᴛᴇɴᴀɴᴄᴇ <ᴏɴ|ᴏꜰꜰ>"))
     mode = message.command[1].lower()
     if mode == "on":

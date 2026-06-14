@@ -119,7 +119,7 @@ async def anime_play_handler(client: Client, message: Message):
     user_id = message.from_user.id if message.from_user else None
     if user_id:
         sudoers_list = await db.get_sudoers()
-        is_sudoer = (user_id == Config.OWNER_ID or user_id in sudoers_list)
+        is_sudoer = (user_id == Config.OWNER_ID or (user_id in sudoers_list and await db.check_sudo_perm(user_id, "play")))
         if not is_sudoer:
             # Check admin rights
             is_admin_user = await music.check_admin(chat_id, user_id, client)

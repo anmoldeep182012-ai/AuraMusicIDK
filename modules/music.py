@@ -135,6 +135,14 @@ async def play_logic(client: Client, message: Message, is_video=True):
     chat_id = message.chat.id
     user_id = message.from_user.id if message.from_user else None
     
+    if user_id:
+        sudoers_list = await db.get_sudoers()
+        if user_id in sudoers_list:
+            if not await db.check_sudo_perm(user_id, "play"):
+                header = fraktur("Access Denied")
+                body = "ʏᴏᴜ ᴅᴏ ɴᴏᴛ ʜᴀᴠᴇ ᴛʜᴇ 'ᴘʟᴀʏ ᴍᴜꜱɪᴄ' ᴘᴇʀᴍɪꜱꜱɪᴏɴ."
+                return await client.send_message(chat_id, f"<blockquote>{header} ❞\n\n{small_caps(body)}</blockquote>")
+
     # Rate Limiting (5 seconds)
     if user_id:
         now = time.time()
@@ -147,12 +155,12 @@ async def play_logic(client: Client, message: Message, is_video=True):
 
     if user_id:
         sudoers_list = await db.get_sudoers()
-        is_sudoer = (user_id == Config.OWNER_ID or user_id in sudoers_list)
+        is_sudoer = (user_id == Config.OWNER_ID or (user_id in sudoers_list and await db.check_sudo_perm(user_id, "play")))
         if not is_sudoer:
             # Check Music Toggle
             music_toggle = await db.get_setting(f"music_{chat_id}", "on")
             if music_toggle == "off":
-                is_admin_user = await check_admin(chat_id, user_id, client)
+                is_admin_user = await check_admin(chat_id, user_id, client, perm="control")
                 if not is_admin_user:
                     header = fraktur("Music Disabled")
                     body = "ᴍᴜꜱɪᴄ ꜱᴛʀᴇᴀᴍɪɴɢ ʜᴀꜱ ʙᴇᴇɴ ᴅɪꜱᴀʙʟᴇᴅ ɪɴ ᴛʜɪꜱ ᴄʜᴀᴛ ʙʏ ᴀᴅᴍɪɴɪꜱᴛʀᴀᴛᴏʀꜱ."
@@ -161,7 +169,7 @@ async def play_logic(client: Client, message: Message, is_video=True):
             # Check Auth Mode
             auth_mode = await db.get_setting(f"auth_{chat_id}", "off")
             if auth_mode == "on":
-                is_admin_user = await check_admin(chat_id, user_id, client)
+                is_admin_user = await check_admin(chat_id, user_id, client, perm="play")
                 if not is_admin_user:
                     header = fraktur("Access Denied")
                     body = "ᴀᴜᴛʜ ᴍᴏᴅᴇ ɪꜱ ᴇɴᴀʙʟᴇᴅ. ᴏɴʟʏ ᴀᴅᴍɪɴɪꜱᴛʀᴀᴛᴏʀꜱ ᴀɴᴅ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜꜱᴇʀꜱ ᴄᴀɴ ᴘʟᴀʏ ᴍᴜꜱɪᴄ."
@@ -484,7 +492,7 @@ async def settings_callbacks(client: Client, callback_query: CallbackQuery):
     action, setting, chat_id = data[0], data[1], int(data[2])
     
     # Auth check
-    is_admin_user = await check_admin(chat_id, callback_query.from_user.id, client)
+    is_admin_user = await check_admin(chat_id, callback_query.from_user.id, client, perm="control")
     if not is_admin_user:
         return await callback_query.answer(small_caps("ᴀᴅᴍɪɴ ʀɪɢʜᴛꜱ ʀᴇQᴜɪʀᴇᴅ"), show_alert=True)
     
@@ -692,7 +700,7 @@ async def music_callbacks(client: Client, callback_query: CallbackQuery):
     data, chat_id = callback_query.data.split("_")[1], callback_query.message.chat.id
     
     # Permission Check for Player Controls
-    is_admin_user = await check_admin(chat_id, callback_query.from_user.id, client)
+    is_admin_user = await check_admin(chat_id, callback_query.from_user.id, client, perm="control")
     if not is_admin_user:
         return await callback_query.answer(small_caps("ᴀᴄᴄᴇꜱꜱ ᴅᴇɴɪᴇᴅ: ᴀᴅᴍɪɴ ʀɪɢʜᴛꜱ ʀᴇQᴜɪʀᴇᴅ"), show_alert=True)
 

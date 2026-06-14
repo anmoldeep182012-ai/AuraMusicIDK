@@ -342,7 +342,7 @@ async def init():
         is_maint = await db.get_setting("maintenance")
         if is_maint == "true":
             sudoers_list = await db.get_sudoers()
-            if user_id != Config.OWNER_ID and user_id not in sudoers_list:
+            if user_id != Config.OWNER_ID and not await db.check_sudo_perm(user_id, "bypass_maintenance"):
                 # Optional: Notify user about maintenance
                 if message.text and message.text.startswith("/"):
                     try:
